@@ -6,16 +6,20 @@ from dotenv import load_dotenv
 from typing import Any, Coroutine, Tuple
 import secrets, string, jwt, psycopg2, os
 
+# loads the environment variables
 load_dotenv()
 
+# environment variables
 database: str = os.environ.get('POSTGRES_DATABASE')
 host: str = os.environ.get('POSTGRES_HOST')
 user:str = os.environ.get('POSTGRES_USER')
 password: str = os.environ.get('POSTGRES_PASSWORD')
 port: str = os.environ.get('POSTGRES_PORT')
 
+# creates the FastAPI app object
 app: FastAPI = FastAPI()
 
+# database connection
 conn = psycopg2.connect(database=os.environ.get('POSTGRES_DATABASE'),
                         host=os.environ.get('POSTGRES_HOST'),
                         user=os.environ.get('POSTGRES_USER'),
