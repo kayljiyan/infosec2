@@ -106,7 +106,7 @@ async def signup(request: Request, response: Response) -> dict:
                 secret: str = generate_secret()
                 today: Any = datetime.today().date()
                 expiry_date: Any = datetime.now(tz=timezone.utc) + timedelta(days=2)
-                payload: dict = { "email": email, "password": password, "exp": expiry_date }
+                payload: dict = { "username": username, "email": email, "password": password, "exp": expiry_date }
                 token: str = jwt.encode(payload, secret) 
                 cur.execute("INSERT INTO users (user_email, user_name, user_password, password_key, created_at) VALUES (%s,%s,%s,%s,%s)",
                             (email,
@@ -129,10 +129,10 @@ async def signup(request: Request, response: Response) -> dict:
             response.status_code = status.HTTP_400_BAD_REQUEST
             return { "message": "Email already exists" }
 
-@app.post('/login')
-async def login(request: Request, response: Response):
+@app.post('/login/token')
+async def login_token(request: Request, response: Response):
     """
-    Logs in an existing user
+    Logs in an existing user via JWT authentication
 
     Args:
         request (Request): request body from the frontend
@@ -142,34 +142,53 @@ async def login(request: Request, response: Response):
         dict: a dictionary containing an error message or a welcome message
     """
     data: Coroutine[Any, Any, Any] = await request.json()
-    email: str = data["email"]
-    password: str = data["password"]
     token: str = data["token"]
     with conn.cursor() as cur:
         cur.execute("SELECT user_token, token_secret FROM tokens WHERE user_token=(%s)", (token,))
         token = cur.fetchone()
         if (token is not None):
             try:
-                jwt.decode(token[0], token[1], leeway=timedelta(seconds=10), algorithms=["HS256"])
-                cur.execute("SELECT user_name, user_password, password_key FROM users WHERE user_email=(%s)", (email,))
-                user: Tuple[str, str] = cur.fetchone()
-                if (user is not None):
-                    if (password == decrypt_password(user[1], user[2])):
-                        response.status_code = status.HTTP_200_OK
-                        conn.commit()
-                        return { "message": f"Welcome {user[0]}" }
-                    else:
-                        response.status_code = status.HTTP_400_BAD_REQUEST
-                        return { "message": "Incorrect password" }
-                else:
-                    response.status_code = status.HTTP_400_BAD_REQUEST
-                    return { "message": "Email not found" }
+                token_decoded = jwt.decode(token[0], token[1], leeway=timedelta(seconds=10), algorithms=["HS256"])
+                response.status_code = status.HTTP_200_OK
+                conn.commit()
+                return { "message": f"Welcome {token_decoded["username"]}" }
             except jwt.ExpiredSignatureError:
                 response.status_code = status.HTTP_400_BAD_REQUEST
                 return { "message": "Token expired" }
         else:
             response.status_code = status.HTTP_400_BAD_REQUEST
             return { "message": "Token not found" }
+        
+@app.post("/login/credentials")
+async def login_credentials(request: Request, response: Response):
+    data: Coroutine[Any, Any, Any] = await request.json()
+    email: str = data["email"]
+    password: str = data["password"]
+    with conn.cursor() as cur:
+        cur.execute("SELECT user_name, user_password, password_key FROM users WHERE user_email=(%s)", (email,))
+        user: Tuple[str, str] = cur.fetchone()
+        if (user is not None):
+            if (password == decrypt_password(user[1], user[2])):
+                secret: str = generate_secret()
+                today: Any = datetime.today().date() 
+                expiry_date: Any = datetime.now(tz=timezone.utc) + timedelta(days=2)
+                payload: dict = { "username": user[0], "email": email, "password": user[1], "exp": expiry_date }
+                token: str = jwt.encode(payload, secret)
+                cur.execute("INSERT INTO tokens (user_token, token_secret, created_at, user_email) VALUES (%s,%s,%s,%s)",
+                            (token,
+                            secret,
+                            today,
+                            email))
+                response.status_code = status.HTTP_200_OK
+                conn.commit()
+                return { "message": f"Welcome {user[0]}", "JWT": token, "Expiry Date": expiry_date }
+            else:
+                response.status_code = status.HTTP_400_BAD_REQUEST
+                return { "message": "Incorrect password" }
+        else:
+            response.status_code = status.HTTP_400_BAD_REQUEST
+            return { "message": "Email not found" }
+    
 
 if __name__ == '__main__':
     import uvicorn
