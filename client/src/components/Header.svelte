@@ -2,7 +2,7 @@
 
 </script>
 
-<header class="flex flex-col relative z-20 backdrop-blur-sm">
+<header class="flex flex-col relative z-20 backdrop-blur-md">
     <div class="max-w-[1400px] mx-auto w-full flex items-center justify-between p-4 py-6">
         <a href="/">
             <h1 class="font-semibold">Login<span class="text-purple-700">Deez</span></h1>
@@ -11,9 +11,11 @@
             <i class="fa-solid fa-bars"></i>
         </button>
         <nav class="hidden md:flex items-center gap-4 lg:gap-6">
-            <a href="/" class="duration-200 hover:text-purple-700 cursor-pointer">Login</a>
-            <a href="/" class="duration-200 hover:text-purple-700 cursor-pointer">Register</a>
-            <a href="/" class="duration-200 hover:text-purple-700 cursor-pointer">Logout</a>
+            <a href="/login" class="duration-200 hover:text-purple-700 cursor-pointer">Login</a>
+            <a href="/register" class="duration-200 hover:text-purple-700 cursor-pointer">Register</a>
         </nav>
+        <button class="md:hidden flex">
+            <p class="duration-200 hover:text-red-700 cursor-pointer">Logout</p>
+        </button>
     </div>
 </header>

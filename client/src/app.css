@@ -20,8 +20,8 @@ span {
   inset: 0;
   height: 100%;
   width: 100%;
-  background-image: linear-gradient(to right, #00000012 1px, transparent 1px),
-    linear-gradient(to bottom, #00000012 1px, transparent 1px);
+  background-image: linear-gradient(to right, #0000002f 1px, transparent 1px),
+    linear-gradient(to bottom, #0000002f 1px, transparent 1px);
   background-size: 24px 24px;
 }
 
