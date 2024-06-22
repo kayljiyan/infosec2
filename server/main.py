@@ -1,10 +1,10 @@
 # modules used
 from fastapi import FastAPI, Request, Response, status
-from cryptography.fernet import Fernet
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from typing import Any, Coroutine, Tuple
-import secrets, string, jwt, psycopg2, os
+from security import generate_secret, encrypt_password, decrypt_password
+import jwt, psycopg2, os
 
 # loads the environment variables
 load_dotenv()
@@ -26,48 +26,6 @@ conn = psycopg2.connect(database=os.environ.get('POSTGRES_DATABASE'),
                         password=os.environ.get('POSTGRES_PASSWORD'),
                         port=os.environ.get('POSTGRES_PORT'))
 
-def generate_secret() -> str:
-    """
-    Generates a 32-character string of random alphanumeric characters
-
-    Returns:
-        str: secret key to be used to generate a token
-    """
-    alphabet = string.ascii_letters + string.digits 
-    secret = ''.join(secrets.choice(alphabet) for i in range(32))
-    return secret
-
-def encrypt_password(password: str) -> str:
-    """
-    Encrypts a password using the Fernet encryption algorithm
-
-    Args:
-        password (str): plaintext password from user request
-
-    Returns:
-        str: the encrypted password
-        str: the key used for encryption
-    """
-    key: bytes = Fernet.generate_key()
-    fernet: Fernet = Fernet(key)
-    encPass: bytes = fernet.encrypt(password.encode())
-    return encPass.decode("latin-1"), key.decode("latin-1")
-
-def decrypt_password(password: str, key: str) -> str:
-    """
-    Decrypts a password using the Fernet decryption algorithm
-
-    Args:
-        password (str): plaintext password from user request
-        key (str): key used to encrypt password from user request
-
-    Returns:
-        str: the decrypted password
-    """
-    fernet: Fernet = Fernet(key)
-    decPass: bytes = fernet.decrypt(password.encode())
-    return decPass.decode("latin-1")
-
 @app.get('/')
 async def index(response: Response) -> dict:
     """
@@ -82,7 +40,7 @@ async def index(response: Response) -> dict:
     response.status_code = status.HTTP_200_OK
     return { 'message': 'Hello World' }
 
-@app.post('/signup')
+@app.post('/api/v1/signup')
 async def signup(request: Request, response: Response) -> dict:
     """
     Signs up a new user
@@ -129,7 +87,7 @@ async def signup(request: Request, response: Response) -> dict:
             response.status_code = status.HTTP_400_BAD_REQUEST
             return { "message": "Email already exists" }
 
-@app.post('/login/token')
+@app.post('/api/v1/login/token')
 async def login_token(request: Request, response: Response):
     """
     Logs in an existing user via JWT authentication
@@ -151,7 +109,7 @@ async def login_token(request: Request, response: Response):
                 token_decoded = jwt.decode(token[0], token[1], leeway=timedelta(seconds=10), algorithms=["HS256"])
                 response.status_code = status.HTTP_200_OK
                 conn.commit()
-                return { "message": f"Welcome {token_decoded["username"]}" }
+                return { "message": token_decoded["username"] }
             except jwt.ExpiredSignatureError:
                 response.status_code = status.HTTP_400_BAD_REQUEST
                 return { "message": "Token expired" }
@@ -159,7 +117,7 @@ async def login_token(request: Request, response: Response):
             response.status_code = status.HTTP_400_BAD_REQUEST
             return { "message": "Token not found" }
         
-@app.post("/login/credentials")
+@app.post("/api/v1/login/credentials")
 async def login_credentials(request: Request, response: Response):
     data: Coroutine[Any, Any, Any] = await request.json()
     email: str = data["email"]
