@@ -1,5 +1,7 @@
 from cryptography.fernet import Fernet
-import secrets, string
+from typing import Any
+from datetime import timedelta
+import secrets, string, jwt
 
 def generate_secret() -> str:
     """
@@ -42,3 +44,28 @@ def decrypt_password(password: str, key: str) -> str:
     fernet: Fernet = Fernet(key)
     decPass: bytes = fernet.decrypt(password.encode())
     return decPass.decode("latin-1")
+
+def generate_token(payload: dict, secret: str) -> str:
+    """
+    Generates a token using the JWT algorithm
+
+    Args:
+        payload (dict): dictionary containing user information
+        secret (str): secret key to be used to generate a token
+
+    Returns:
+        str: the generated token
+    """
+    return jwt.encode(payload, secret)
+
+def verify_token(token: str, secret: str) -> Any:
+    """
+    Verifies a token using the JWT algorithm
+
+    Args:
+        token (str): unique token
+        
+    Returns:
+        dict: dictionary containing user information
+    """
+    return jwt.decode(token, secret, leeway=timedelta(seconds=10), algorithms=["HS256"])

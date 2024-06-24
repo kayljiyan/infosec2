@@ -1,30 +1,13 @@
 # modules used
 from fastapi import FastAPI, Request, Response, status
 from datetime import datetime, timedelta, timezone
-from dotenv import load_dotenv
 from typing import Any, Coroutine, Tuple
-from security import generate_secret, encrypt_password, decrypt_password
-import jwt, psycopg2, os
-
-# loads the environment variables
-load_dotenv()
-
-# environment variables
-database: str = os.environ.get('POSTGRES_DATABASE')
-host: str = os.environ.get('POSTGRES_HOST')
-user:str = os.environ.get('POSTGRES_USER')
-password: str = os.environ.get('POSTGRES_PASSWORD')
-port: str = os.environ.get('POSTGRES_PORT')
+from security import generate_secret, encrypt_password, decrypt_password, generate_token, verify_token
+from db import conn, check_email_exists, check_username_exists, find_token, find_user, insert_new_user, insert_new_token
+import jwt
 
 # creates the FastAPI app object
 app: FastAPI = FastAPI()
-
-# database connection
-conn = psycopg2.connect(database=os.environ.get('POSTGRES_DATABASE'),
-                        host=os.environ.get('POSTGRES_HOST'),
-                        user=os.environ.get('POSTGRES_USER'),
-                        password=os.environ.get('POSTGRES_PASSWORD'),
-                        port=os.environ.get('POSTGRES_PORT'))
 
 @app.get('/')
 async def index(response: Response) -> dict:
@@ -56,36 +39,23 @@ async def signup(request: Request, response: Response) -> dict:
     username: str = data["username"]
     email: str = data["email"]
     password, key = encrypt_password(data["password"])
-    with conn.cursor() as cur:
-        cur.execute("SELECT * FROM users WHERE user_email=(%s)", (email,))
-        if (cur.fetchone() is None):
-            cur.execute("SELECT * FROM users WHERE user_name=(%s)", (username,))
-            if (cur.fetchone() is None):
-                secret: str = generate_secret()
-                today: Any = datetime.today().date()
-                expiry_date: Any = datetime.now(tz=timezone.utc) + timedelta(days=2)
-                payload: dict = { "username": username, "email": email, "password": password, "exp": expiry_date }
-                token: str = jwt.encode(payload, secret) 
-                cur.execute("INSERT INTO users (user_email, user_name, user_password, password_key, created_at) VALUES (%s,%s,%s,%s,%s)",
-                            (email,
-                            username,
-                            password,
-                            key,
-                            today))
-                cur.execute("INSERT INTO tokens (user_token, token_secret, created_at, user_email) VALUES (%s,%s,%s,%s)",
-                            (token,
-                            secret,
-                            today,
-                            email))
-                response.status_code = status.HTTP_201_CREATED
-                conn.commit()
-                return { "JWT": token, "Expiry Date": expiry_date }
-            else:
-                response.status_code = status.HTTP_400_BAD_REQUEST
-                return { "message": "Username already exists" }
+    if (check_email_exists(email)):
+        if (check_username_exists(username)):
+            secret: str = generate_secret()
+            today: Any = datetime.today().date()
+            expiry_date: Any = datetime.now(tz=timezone.utc) + timedelta(days=2)
+            payload: dict = { "username": username, "email": email, "password": password, "exp": expiry_date }
+            token: str = generate_token(payload, secret) 
+            insert_new_user(email, username, password, key, today)
+            insert_new_token(token, secret, today, email)
+            response.status_code = status.HTTP_201_CREATED
+            return { "JWT": token, "Expiry Date": expiry_date }
         else:
             response.status_code = status.HTTP_400_BAD_REQUEST
-            return { "message": "Email already exists" }
+            return { "message": "Username already exists" }
+    else:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return { "message": "Email already exists" }
 
 @app.post('/api/v1/login/token')
 async def login_token(request: Request, response: Response):
@@ -101,51 +71,41 @@ async def login_token(request: Request, response: Response):
     """
     data: Coroutine[Any, Any, Any] = await request.json()
     token: str = data["token"]
-    with conn.cursor() as cur:
-        cur.execute("SELECT user_token, token_secret FROM tokens WHERE user_token=(%s)", (token,))
-        token = cur.fetchone()
-        if (token is not None):
-            try:
-                token_decoded = jwt.decode(token[0], token[1], leeway=timedelta(seconds=10), algorithms=["HS256"])
-                response.status_code = status.HTTP_200_OK
-                conn.commit()
-                return { "message": token_decoded["username"] }
-            except jwt.ExpiredSignatureError:
-                response.status_code = status.HTTP_400_BAD_REQUEST
-                return { "message": "Token expired" }
-        else:
+    token: Tuple[str, str] = find_token(token)
+    if (token is not None):
+        try:
+            token_decoded = verify_token(token[0], token[1])
+            response.status_code = status.HTTP_200_OK
+            return { "message": token_decoded["username"] }
+        except jwt.ExpiredSignatureError:
             response.status_code = status.HTTP_400_BAD_REQUEST
-            return { "message": "Token not found" }
+            return { "message": "Token expired" }
+    else:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return { "message": "Token not found" }
         
 @app.post("/api/v1/login/credentials")
 async def login_credentials(request: Request, response: Response):
     data: Coroutine[Any, Any, Any] = await request.json()
     email: str = data["email"]
     password: str = data["password"]
-    with conn.cursor() as cur:
-        cur.execute("SELECT user_name, user_password, password_key FROM users WHERE user_email=(%s)", (email,))
-        user: Tuple[str, str] = cur.fetchone()
-        if (user is not None):
-            if (password == decrypt_password(user[1], user[2])):
-                secret: str = generate_secret()
-                today: Any = datetime.today().date() 
-                expiry_date: Any = datetime.now(tz=timezone.utc) + timedelta(days=2)
-                payload: dict = { "username": user[0], "email": email, "password": user[1], "exp": expiry_date }
-                token: str = jwt.encode(payload, secret)
-                cur.execute("INSERT INTO tokens (user_token, token_secret, created_at, user_email) VALUES (%s,%s,%s,%s)",
-                            (token,
-                            secret,
-                            today,
-                            email))
-                response.status_code = status.HTTP_200_OK
-                conn.commit()
-                return { "message": f"Welcome {user[0]}", "JWT": token, "Expiry Date": expiry_date }
-            else:
-                response.status_code = status.HTTP_400_BAD_REQUEST
-                return { "message": "Incorrect password" }
+    user: Tuple[str, str, str] = find_user(email)
+    if (user is not None):
+        if (password == decrypt_password(user[1], user[2])):
+            secret: str = generate_secret()
+            today: Any = datetime.today().date() 
+            expiry_date: Any = datetime.now(tz=timezone.utc) + timedelta(days=2)
+            payload: dict = { "username": user[0], "email": email, "password": user[1], "exp": expiry_date }
+            token: str = generate_token(payload, secret)
+            insert_new_token(token, secret, today, email)
+            response.status_code = status.HTTP_200_OK
+            return { "message": f"Welcome {user[0]}", "JWT": token, "Expiry Date": expiry_date }
         else:
             response.status_code = status.HTTP_400_BAD_REQUEST
-            return { "message": "Email not found" }
+            return { "message": "Incorrect password" }
+    else:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return { "message": "Email not found" }
     
 
 if __name__ == '__main__':
