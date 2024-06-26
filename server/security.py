@@ -1,71 +1,58 @@
-from cryptography.fernet import Fernet
+from datetime import timedelta, datetime, timezone
+from password_strength import PasswordStats
 from typing import Any
-from datetime import timedelta
-import secrets, string, jwt
+import jwt, consts, bcrypt
 
-def generate_secret() -> str:
+def check_password_strength(password: str) -> bool:
     """
-    Generates a 32-character string of random alphanumeric characters
-
-    Returns:
-        str: secret key to be used to generate a token
-    """
-    alphabet = string.ascii_letters + string.digits 
-    secret = ''.join(secrets.choice(alphabet) for i in range(32))
-    return secret
-
-def encrypt_password(password: str) -> str:
-    """
-    Encrypts a password using the Fernet encryption algorithm
+    Checks the strength of a password
 
     Args:
-        password (str): plaintext password from user request
+        password (str): the password to be checked
+    """
+    return PasswordStats(password).strength() >= 0.66
+
+def encrypt_password(plain_password: str) -> str:
+    """
+    Encrypts a password using the bcrypt algorithm
+
+    Args:
+        plain_password (str): the password to be encrypted
 
     Returns:
         str: the encrypted password
-        str: the key used for encryption
     """
-    key: bytes = Fernet.generate_key()
-    fernet: Fernet = Fernet(key)
-    encPass: bytes = fernet.encrypt(password.encode())
-    return encPass.decode("latin-1"), key.decode("latin-1")
+    bytes = plain_password.encode('utf-8')
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(bytes, salt).decode('utf-8')
 
-def decrypt_password(password: str, key: str) -> str:
+def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    Decrypts a password using the Fernet decryption algorithm
+    Verifies a password using the bcrypt algorithm
 
     Args:
-        password (str): plaintext password from user request
-        key (str): key used to encrypt password from user request
-
-    Returns:
-        str: the decrypted password
+        plain_password (str): the password to be verified
+        hashed_password (str): the hashed password to be verified
     """
-    fernet: Fernet = Fernet(key)
-    decPass: bytes = fernet.decrypt(password.encode())
-    return decPass.decode("latin-1")
+    bytes = plain_password.encode('utf-8')
+    hashed_password =  hashed_password.encode('utf-8')
+    return bcrypt.checkpw(bytes, hashed_password)
 
-def generate_token(payload: dict, secret: str) -> str:
+def generate_access_token(payload: dict, expiry_date: timedelta | None = None) -> str:
     """
-    Generates a token using the JWT algorithm
+    Generates an access token
 
     Args:
-        payload (dict): dictionary containing user information
-        secret (str): secret key to be used to generate a token
-
-    Returns:
-        str: the generated token
+        payload (dict): the payload to be encoded
+        expiry_date (timedelta | None, optional): the expiry date of the token. Defaults to None.
     """
-    return jwt.encode(payload, secret)
+    to_encode = payload.copy()
+    if expiry_date:
+        expire = datetime.now(timezone.utc) + expiry_date
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, consts.SECRET_KEY, algorithm=consts.ALGORITHM)
 
-def verify_token(token: str, secret: str) -> Any:
-    """
-    Verifies a token using the JWT algorithm
-
-    Args:
-        token (str): unique token
-        
-    Returns:
-        dict: dictionary containing user information
-    """
-    return jwt.decode(token, secret, leeway=timedelta(seconds=10), algorithms=["HS256"])
+def verify_access_token(token: str) -> dict:
+    return jwt.decode(token, consts.SECRET_KEY, algorithms=[consts.ALGORITHM])

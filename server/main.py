@@ -1,16 +1,18 @@
 # modules used
-from fastapi import FastAPI, Request, Response, status
-from datetime import datetime, timedelta, timezone
-from typing import Any, Coroutine, Tuple
-from security import generate_secret, encrypt_password, decrypt_password, generate_token, verify_token
-from db import conn, check_email_exists, check_username_exists, find_token, find_user, insert_new_user, insert_new_token
-import jwt
+from fastapi import Depends, FastAPI, Request, Response, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from datetime import timedelta
+from typing import Any, Coroutine, Annotated, List
+import security, db, consts, schemas
 
 # creates the FastAPI app object
 app: FastAPI = FastAPI()
 
+# OAuth2PasswordBearer instance
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/login")
+
 @app.get('/')
-async def index(response: Response) -> dict:
+async def index(token: Annotated[str, Depends(oauth2_scheme)], response: Response):
     """
     Index page for the API
 
@@ -20,11 +22,18 @@ async def index(response: Response) -> dict:
     Returns:
         dict: hello world message
     """
-    response.status_code = status.HTTP_200_OK
-    return { 'message': 'Hello World' }
+    try:
+        payload = security.verify_access_token(token)
+        payload = schemas.TokenData(**payload)
+        username = payload.user_name
+        response.status_code = status.HTTP_200_OK
+        return { 'message': f"Welcome {username}" }
+    except Exception as e:
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        return { "detail": str(e) }
 
-@app.post('/api/v1/signup')
-async def signup(request: Request, response: Response) -> dict:
+@app.post('/api/v1/register')
+async def signup(request: Request, response: Response):
     """
     Signs up a new user
 
@@ -35,78 +44,52 @@ async def signup(request: Request, response: Response) -> dict:
     Returns:
         dict: a dictionary containing an error message or the token and expiration date
     """
-    data: Coroutine[str, str, str] = await request.json()
-    username: str = data["username"]
-    email: str = data["email"]
-    password, key = encrypt_password(data["password"])
-    if (check_email_exists(email)):
-        if (check_username_exists(username)):
-            secret: str = generate_secret()
-            today: Any = datetime.today().date()
-            expiry_date: Any = datetime.now(tz=timezone.utc) + timedelta(days=2)
-            payload: dict = { "username": username, "email": email, "password": password, "exp": expiry_date }
-            token: str = generate_token(payload, secret) 
-            insert_new_user(email, username, password, key, today)
-            insert_new_token(token, secret, today, email)
-            response.status_code = status.HTTP_201_CREATED
-            return { "JWT": token, "Expiry Date": expiry_date }
+    data: Coroutine[str, str, str, str, str] = await request.json()
+    try:
+        user = schemas.UserAddToDB(**data)
+        if (security.check_password_strength(user.user_password)):
+            user.user_password = security.encrypt_password(user.user_password)
+            if (db.check_email_exists(user.user_email)):
+                db.insert_new_user(user.user_fname, user.user_mname, user.user_lname, user.user_password, user.user_email)
+                response.status_code = status.HTTP_201_CREATED
+                return { "detail": "User created" }
+            else:
+                response.status_code = status.HTTP_400_BAD_REQUEST
+                return { "detail": "Email already exists" }
         else:
             response.status_code = status.HTTP_400_BAD_REQUEST
-            return { "message": "Username already exists" }
-    else:
+            return { "detail": "Password is too weak" }
+    except Exception as e:
         response.status_code = status.HTTP_400_BAD_REQUEST
-        return { "message": "Email already exists" }
+        return { "detail": "Invalid email address" }
 
-@app.post('/api/v1/login/token')
-async def login_token(request: Request, response: Response):
+@app.post('/api/v1/login')
+async def login(
+    request: Annotated[OAuth2PasswordRequestForm, Depends()],
+    response: Response
+    ):
     """
-    Logs in an existing user via JWT authentication
+    Logs in a user
 
     Args:
-        request (Request): request body from the frontend
+        request (OAuth2PasswordRequestForm): request body from the frontend
         response (Response): response object to be returned in the header
 
     Returns:
-        dict: a dictionary containing an error message or a welcome message
+        models.Token: a dictionary containing the access token and expiration date
     """
-    data: Coroutine[Any, Any, Any] = await request.json()
-    token: str = data["token"]
-    token: Tuple[str, str] = find_token(token)
-    if (token is not None):
-        try:
-            token_decoded = verify_token(token[0], token[1])
-            response.status_code = status.HTTP_200_OK
-            return { "message": token_decoded["username"] }
-        except jwt.ExpiredSignatureError:
-            response.status_code = status.HTTP_400_BAD_REQUEST
-            return { "message": "Token expired" }
-    else:
-        response.status_code = status.HTTP_400_BAD_REQUEST
-        return { "message": "Token not found" }
-        
-@app.post("/api/v1/login/credentials")
-async def login_credentials(request: Request, response: Response):
-    data: Coroutine[Any, Any, Any] = await request.json()
-    email: str = data["email"]
-    password: str = data["password"]
-    user: Tuple[str, str, str] = find_user(email)
+    user: schemas.UserInDB | None = db.authenticate_user(request.username, request.password)
+    # print(user)
     if (user is not None):
-        if (password == decrypt_password(user[1], user[2])):
-            secret: str = generate_secret()
-            today: Any = datetime.today().date() 
-            expiry_date: Any = datetime.now(tz=timezone.utc) + timedelta(days=2)
-            payload: dict = { "username": user[0], "email": email, "password": user[1], "exp": expiry_date }
-            token: str = generate_token(payload, secret)
-            insert_new_token(token, secret, today, email)
-            response.status_code = status.HTTP_200_OK
-            return { "message": f"Welcome {user[0]}", "JWT": token, "Expiry Date": expiry_date }
-        else:
-            response.status_code = status.HTTP_400_BAD_REQUEST
-            return { "message": "Incorrect password" }
+        data = {"user_email": user.user_email, "user_name": user.user_name}
+        access_token_expiry_date = timedelta(minutes=consts.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = security.generate_access_token(data, access_token_expiry_date)
+        response.status_code = status.HTTP_200_OK
+        return schemas.Token(access_token=access_token, token_type="bearer")
     else:
         response.status_code = status.HTTP_400_BAD_REQUEST
-        return { "message": "Email not found" }
-    
+        response.headers["WWW-Authenticate"] = "Bearer"
+        return { "detail": "Incorrect username or password" }
 
 if __name__ == '__main__':
     import uvicorn
