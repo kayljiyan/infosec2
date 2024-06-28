@@ -126,8 +126,32 @@ async def update_appointment(token: Annotated[str, Depends(oauth2_scheme)], requ
         return { "detail": str(e) }
 
 @app.post("/api/v1/record")
-async def add_record(token: Annotated[str, Depends(oauth2_scheme)], response: Response):
-    pass
+async def add_record(token: Annotated[str, Depends(oauth2_scheme)], request: Request, response: Response):
+    try:
+        payload = security.verify_access_token(token)
+        payload = schemas.TokenData(**payload)
+        user_uuid = payload.user_uuid
+        data: Coroutine[str] = await request.json()
+        db.add_record(data["appointment_uuid"], user_uuid)
+        response.status_code = status.HTTP_201_CREATED
+        return { 'detail': "Record has been added" }
+    except Exception as e:
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        return { "detail": str(e) }
+
+@app.delete("/api/v1/appointment")
+async def delete_appointment(token: Annotated[str, Depends(oauth2_scheme)], request: Request, response: Response):
+    try:
+        payload = security.verify_access_token(token)
+        payload = schemas.TokenData(**payload)
+        user_uuid = payload.user_uuid
+        data: Coroutine[str] = await request.json()
+        db.delete_appointment(user_uuid, data["appointment_uuid"])
+        response.status_code = status.HTTP_200_OK
+        return { 'detail': "Appointment has been deleted" }
+    except Exception as e:
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        return { "detail": str(e) }
 
 if __name__ == '__main__':
     import uvicorn

@@ -151,5 +151,16 @@ def update_appointment(appointment_uuid: str, appointment_date: str, appointment
             return Exception
     conn.commit()
 
-def add_record():
-    pass
+def add_record(appointment_uuid: str, doctor_uuid: str):
+    appointment_uuid: UUID = UUID(appointment_uuid)
+    doctor_uuid: UUID = UUID(doctor_uuid)
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO records (appointment_uuid, doctor_uuid) VALUES (%s, %s)", (appointment_uuid, doctor_uuid))
+    conn.commit()
+    
+def delete_appointment(user_uuid: str, appointment_uuid: str):
+    appointment_uuid: UUID = UUID(appointment_uuid)
+    user_uuid: UUID = UUID(user_uuid)
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM appointments WHERE appointment_uuid = (%s) AND user_uuid = (%s)", (appointment_uuid, user_uuid))
+    conn.commit()
