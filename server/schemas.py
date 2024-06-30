@@ -22,7 +22,7 @@ class UserInDB(User):
         hashed_password (str): the user's hashed password
     """
     hashed_password: str
-    role: str
+    user_role: str
     
 class UserAddToDB(BaseModel):
     """
@@ -32,11 +32,10 @@ class UserAddToDB(BaseModel):
         user_name (str): the user's name
     """
     user_fname: str
-    user_mname: str
     user_lname: str
     user_password: str
     user_email: EmailStr
-    role: str
+    user_role: str
     
 class AppointmentAddToDB(BaseModel):
     """
@@ -96,4 +95,4 @@ class TokenData(BaseModel):
     user_uuid: str | None = None
     user_name: str | None = None
     user_email: str | None = None
-    role: str | None = None
+    user_role: str | None = None

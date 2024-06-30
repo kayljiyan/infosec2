@@ -27,9 +27,9 @@ async def index(token: Annotated[str, Depends(oauth2_scheme)], response: Respons
         payload = security.verify_access_token(token)
         print(payload)
         payload = schemas.TokenData(**payload)
-        username = payload
+        data = payload
         response.status_code = status.HTTP_200_OK
-        return { 'message': f"Welcome {username}" }
+        return { 'data': data }
     except Exception as e:
         response.status_code = status.HTTP_401_UNAUTHORIZED
         return { "detail": str(e) }
@@ -51,8 +51,8 @@ async def register(request: Request, response: Response):
         user = schemas.UserAddToDB(**data)
         if (security.check_password_strength(user.user_password)):
             user.user_password = security.encrypt_password(user.user_password)
-            if (not db.check_email_exists(user.user_email)):
-                db.insert_new_user(user.user_fname, user.user_mname, user.user_lname, user.user_password, user.user_email, user.role)
+            if (db.check_email_exists(user.user_email)):
+                db.insert_new_user(user.user_fname, user.user_lname, user.user_password, user.user_email, user.user_role)
                 response.status_code = status.HTTP_201_CREATED
                 return { "detail": "User created" }
             else:
@@ -62,9 +62,8 @@ async def register(request: Request, response: Response):
             response.status_code = status.HTTP_400_BAD_REQUEST
             return { "detail": "Password is too weak" }
     except Exception as e:
-        print(str(e))
         response.status_code = status.HTTP_400_BAD_REQUEST
-        return { "detail": "Invalid email address" }
+        return { "detail": str(e) }
 
 @app.post('/api/v1/login')
 async def login(
@@ -84,7 +83,7 @@ async def login(
     account: schemas.UserInDB | None = db.authenticate_login(request.username, request.password)
     # print(user)
     if (account is not None):
-        data = { "user_uuid": account.user_uuid, "user_email": account.user_email, "user_name": account.user_name, "role": account.role }
+        data = { "user_uuid": account.user_uuid, "user_email": account.user_email, "user_name": account.user_name, "user_role": account.user_role }
         access_token_expiry_date = timedelta(minutes=consts.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = security.generate_access_token(data, access_token_expiry_date)
         response.status_code = status.HTTP_200_OK
@@ -94,33 +93,121 @@ async def login(
         response.headers["WWW-Authenticate"] = "Bearer"
         return { "detail": "Incorrect email or password" }
     
-@app.post("/api/v1/appointment")
-async def add_appointment(token: Annotated[str, Depends(oauth2_scheme)], response: Response):
+@app.get("/api/v1/requests")
+async def get_requests(token: Annotated[str, Depends(oauth2_scheme)], response: Response):
     try:
         payload = security.verify_access_token(token)
         payload = schemas.TokenData(**payload)
-        user_uuid = payload.user_uuid
-        db.add_appointment(user_uuid)
-        response.status_code = status.HTTP_201_CREATED
-        return { 'detail': "Appointment request sent for approval" }
+        if payload.user_role == "teller" or payload.user_role == "doctor":
+            data = db.get_requests()
+            response.status_code = status.HTTP_200_OK
+            return { 'data': data }
+        else:
+            response.status_code = status.HTTP_403_FORBIDDEN
+            return { 'detail': "Unauthorized access" }
     except Exception as e:
         response.status_code = status.HTTP_401_UNAUTHORIZED
         return { "detail": str(e) }
 
-@app.put("/api/v1/appointment")
-async def update_appointment(token: Annotated[str, Depends(oauth2_scheme)], request: Request, response: Response):
+@app.get("/api/v1/requests/{user_uuid}")
+async def get_user_requests(token: Annotated[str, Depends(oauth2_scheme)], user_uuid: str, response: Response):
     try:
         payload = security.verify_access_token(token)
         payload = schemas.TokenData(**payload)
-        teller_uuid = payload.user_uuid
-        data: Coroutine[str, datetime, str, str] = await request.json()
-        query_result = db.update_appointment(data["appointment_uuid"], data["appointment_date"], data["appointment_status"], teller_uuid)
-        if (query_result is None):
+        if payload.user_role == "user" and payload.user_uuid == user_uuid:
+            data = db.get_user_requests(user_uuid)
             response.status_code = status.HTTP_200_OK
-            return { 'detail': "Appointment request updated" }
+            return { 'data': data }
         else:
-            response.status_code = status.HTTP_404_NOT_FOUND
-            return { 'detail': "Appointment not found" }
+            response.status_code = status.HTTP_403_FORBIDDEN
+            return { 'detail': "Unauthorized access" }
+    except Exception as e:
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        return { "detail": str(e) }
+
+@app.get("/api/v1/appointments")
+async def get_appointments(token: Annotated[str, Depends(oauth2_scheme)], response: Response):
+    try:
+        payload = security.verify_access_token(token)
+        payload = schemas.TokenData(**payload)
+        if payload.user_role == "teller" or payload.user_role == "doctor":
+            data = db.get_appointments()
+            response.status_code = status.HTTP_200_OK
+            return { 'data': data }
+        else:
+            response.status_code = status.HTTP_403_FORBIDDEN
+            return { 'detail': "Unauthorized access" }
+    except Exception as e:
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        return { "detail": str(e) }
+    
+@app.get("/api/v1/appointments/{user_uuid}")
+async def get_user_appointments(token: Annotated[str, Depends(oauth2_scheme)], user_uuid: str, response: Response):
+    try:
+        payload = security.verify_access_token(token)
+        payload = schemas.TokenData(**payload)
+        if payload.user_role == "user" and payload.user_uuid == user_uuid:
+            data = db.get_user_appointments(user_uuid)
+            response.status_code = status.HTTP_200_OK
+            return { 'data': data }
+        else:
+            response.status_code = status.HTTP_403_FORBIDDEN
+            return { 'detail': "Unauthorized access" }
+    except Exception as e:
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        return { "detail": str(e) }
+
+@app.get("/api/v1/records")
+async def get_records(token: Annotated[str, Depends(oauth2_scheme)], response: Response):
+    try:
+        payload = security.verify_access_token(token)
+        payload = schemas.TokenData(**payload)
+        if payload.user_role == "teller" or payload.user_role == "doctor":
+            data = db.get_records()
+            response.status_code = status.HTTP_200_OK
+            return { 'data': data }
+        else:
+            response.status_code = status.HTTP_403_FORBIDDEN
+            return { 'detail': "Unauthorized access" }
+    except Exception as e:
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        return { "detail": str(e) }
+
+@app.post("/api/v1/request")
+async def add_request(token: Annotated[str, Depends(oauth2_scheme)], response: Response):
+    try:
+        payload = security.verify_access_token(token)
+        payload = schemas.TokenData(**payload)
+        if payload.user_role == "user":
+            user_uuid = payload.user_uuid
+            db.add_request(user_uuid)
+            response.status_code = status.HTTP_201_CREATED
+            return { 'detail': "Request sent for approval" }
+        else:
+            response.status_code = status.HTTP_403_FORBIDDEN
+            return { 'detail': "Unauthorized access" }
+    except Exception as e:
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        return { "detail": str(e) }
+
+@app.post("/api/v1/appointment")
+async def add_appointment(token: Annotated[str, Depends(oauth2_scheme)], request: Request, response: Response):
+    try:
+        payload = security.verify_access_token(token)
+        payload = schemas.TokenData(**payload)
+        if payload.user_role == "teller":
+            user_uuid = payload.user_uuid
+            data: Coroutine[str, datetime, str] = await request.json()
+            query_result = db.add_appointment(data["request_uuid"], data["appointment_date"], data["request_status"], user_uuid)
+            if (query_result is None):
+                response.status_code = status.HTTP_200_OK
+                return { 'detail': "Appointment added" }
+            else:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return { 'detail': "Request not found" }
+        else:
+            response.status_code = status.HTTP_403_FORBIDDEN
+            return { 'detail': "Unauthorized access" }
     except Exception as e:
         response.status_code = status.HTTP_401_UNAUTHORIZED
         return { "detail": str(e) }
@@ -130,25 +217,33 @@ async def add_record(token: Annotated[str, Depends(oauth2_scheme)], request: Req
     try:
         payload = security.verify_access_token(token)
         payload = schemas.TokenData(**payload)
-        user_uuid = payload.user_uuid
-        data: Coroutine[str] = await request.json()
-        db.add_record(data["appointment_uuid"], user_uuid)
-        response.status_code = status.HTTP_201_CREATED
-        return { 'detail': "Record has been added" }
+        if payload.user_role == "doctor":
+            user_uuid = payload.user_uuid
+            data: Coroutine[str, str] = await request.json()
+            db.add_record(data["record_content"], data["appointment_uuid"], user_uuid)
+            response.status_code = status.HTTP_201_CREATED
+            return { 'detail': "Record has been added" }
+        else:
+            response.status_code = status.HTTP_403_FORBIDDEN
+            return { 'detail': "Unauthorized access" }
     except Exception as e:
         response.status_code = status.HTTP_401_UNAUTHORIZED
         return { "detail": str(e) }
 
-@app.delete("/api/v1/appointment")
-async def delete_appointment(token: Annotated[str, Depends(oauth2_scheme)], request: Request, response: Response):
+@app.delete("/api/v1/request")
+async def delete_request(token: Annotated[str, Depends(oauth2_scheme)], request: Request, response: Response):
     try:
         payload = security.verify_access_token(token)
         payload = schemas.TokenData(**payload)
-        user_uuid = payload.user_uuid
-        data: Coroutine[str] = await request.json()
-        db.delete_appointment(user_uuid, data["appointment_uuid"])
-        response.status_code = status.HTTP_200_OK
-        return { 'detail': "Appointment has been deleted" }
+        if payload.user_role == "user":
+            user_uuid = payload.user_uuid
+            data: Coroutine[str] = await request.json()
+            db.cancel_request(user_uuid, data["request_uuid"])
+            response.status_code = status.HTTP_200_OK
+            return { 'detail': "Request has been deleted" }
+        else:
+            response.status_code = status.HTTP_403_FORBIDDEN
+            return { 'detail': "Unauthorized access" }
     except Exception as e:
         response.status_code = status.HTTP_401_UNAUTHORIZED
         return { "detail": str(e) }

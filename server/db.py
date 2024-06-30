@@ -1,7 +1,7 @@
 # modules used
 from datetime import datetime
 from dotenv import load_dotenv
-from typing import Any
+from typing import List, Tuple
 from security import verify_password
 from psycopg2.extras import register_uuid
 from uuid import UUID
@@ -9,7 +9,7 @@ import os, psycopg2, schemas
 
 register_uuid()
 
-user_structure = [ "user_uuid", "user_name", "user_email", "hashed_password" ]
+user_structure = [ "user_uuid", "user_name", "user_email", "hashed_password", "user_role" ]
 
 # loads the environment variables
 load_dotenv()
@@ -29,45 +29,29 @@ conn = psycopg2.connect(database=os.environ.get('POSTGRES_DATABASE'),
                         port=os.environ.get('POSTGRES_PORT'))
 
 
-def insert_new_user(fname: str, mname: str, lname: str, password: str, email: str, role: str) -> None:
+def insert_new_user(fname: str, lname: str, password: str, email: str, role: str) -> None:
     """
     Inserts a new user into the users table
 
     Args:
         fname (str): user first name
-        mname (str): user middle name
         lname (str): user last name
-        password (str):  user password
+        password (str): user password
         email (str): user email
+        role (str): user role
     """
     with conn.cursor() as cur:
-        match role:
-            case "doctor":
-                cur.execute("INSERT INTO doctors (doctor_fname, doctor_mname, doctor_lname, doctor_password, doctor_email) VALUES (%s,%s,%s,%s,%s)",
+        cur.execute("INSERT INTO users (user_fname, user_lname, user_password, user_email, user_role) VALUES (%s,%s,%s,%s,%s)",
                         (fname,
-                        mname,
                         lname,
                         password,
-                        email))
-            case "teller":
-                cur.execute("INSERT INTO tellers (teller_fname, teller_mname, teller_lname, teller_password, teller_email) VALUES (%s,%s,%s,%s,%s)",
-                        (fname,
-                        mname,
-                        lname,
-                        password,
-                        email))
-            case "user":
-                cur.execute("INSERT INTO users (user_fname, user_mname, user_lname, user_password, user_email) VALUES (%s,%s,%s,%s,%s)",
-                        (fname,
-                        mname,
-                        lname,
-                        password,
-                        email))
+                        email,
+                        role))
     conn.commit()
 
 def check_email_exists(email: str) -> bool:
     """
-    Checks if an email exists in the users table
+    Checks if an email already exists in the users table
 
     Args:
         email (str): user email
@@ -76,55 +60,35 @@ def check_email_exists(email: str) -> bool:
         bool: True if the email exists, False otherwise
     """
     with conn.cursor() as cur:
-        cur.execute("SELECT * FROM doctors WHERE doctor_email=(%s)", (email,))
-        if cur.fetchone() is not None:
-            return True
-        cur.execute("SELECT * FROM tellers WHERE teller_email=(%s)", (email,))
-        if cur.fetchone() is not None:
-            return True
         cur.execute("SELECT * FROM users WHERE user_email=(%s)", (email,))
-        if cur.fetchone() is not None:
-            return True
-        return False
+        return cur.fetchone() is None
 
 def get_account(email: str) -> schemas.UserInDB | None:
     """
-    Gets a user from the users table
+    Retrieves user data from the users table
 
     Args:
         email (str): user email
 
     Returns:
-        Tuple[str, str, str] | None: a tuple containing the user's name, and email if the email exists, None otherwise
+        schemas.UserInDB | None: user data if found, None otherwise
     """
     with conn.cursor() as cur:
-        cur.execute("SELECT doctor_uuid, CONCAT(doctor_lname, ', ', doctor_fname, ' ', doctor_mname) AS doctor_name, doctor_email, doctor_password FROM doctors WHERE doctor_email=(%s)", (email,))
-        doctor = cur.fetchone()
-        if doctor is not None:
-            doctor_dict = { user_structure[i] : str(doctor[i]) for i, _ in enumerate(doctor) }
-            doctor_dict.update({"role": "doctor"})
-            return schemas.UserInDB(**doctor_dict)
-        cur.execute("SELECT teller_uuid, CONCAT(teller_lname, ', ', teller_fname, ' ', teller_mname) AS teller_name, teller_email, teller_password FROM tellers WHERE teller_email=(%s)", (email,))
-        teller = cur.fetchone()
-        if teller is not None:
-            teller_dict = { user_structure[i] : str(teller[i]) for i, _ in enumerate(teller) }
-            teller_dict.update({"role": "teller"})
-            return schemas.UserInDB(**teller_dict)
-        cur.execute("SELECT user_uuid, CONCAT(user_lname, ', ', user_fname, ' ', user_mname) AS user_name, user_email, user_password FROM users WHERE user_email=(%s)", (email,))
+        cur.execute("SELECT user_uuid, CONCAT(user_lname, ', ', user_fname) AS user_name, user_email, user_password, user_role FROM users WHERE user_email=(%s)", (email,))
         user = cur.fetchone()
         if user is not None:
             user_dict = { user_structure[i] : str(user[i]) for i, _ in enumerate(user) }
-            user_dict.update({"role": "user"})
             return schemas.UserInDB(**user_dict)
         else:
             return None
     
 def authenticate_login(email: str, password: str):
     """
-    Authenticates an account
+    Authenticates a user based on their email and password
 
     Args:
-        email (str): account email
+        email (str): user email
+        password (str): user password
     """
     account = get_account(email)
     # print(account)
@@ -134,33 +98,127 @@ def authenticate_login(email: str, password: str):
         return None
     return account
 
-def add_appointment(user_uuid: str):
+def add_request(user_uuid: str):
+    """
+    Adds a new request to the requests table
+
+    Args:
+        user_uuid (str): user uuid
+    """
     user_uuid: UUID = UUID(user_uuid)
     with conn.cursor() as cur:
-        cur.execute("INSERT INTO appointments (user_uuid) VALUES (%s)", (user_uuid,))
+        cur.execute("INSERT INTO requests (user_uuid) VALUES (%s)", (user_uuid,))
     conn.commit()
 
-def update_appointment(appointment_uuid: str, appointment_date: str, appointment_status: str, teller_uuid: str) -> Exception | None:
-    teller_uuid: UUID = UUID(teller_uuid)
-    appointment_uuid: UUID = UUID(appointment_uuid)
+def add_appointment(request_uuid: str, appointment_date: str, request_status: str, user_uuid: str) -> Exception | None:
+    """
+    Adds a new appointment to the appointments table
+
+    Args:
+        request_uuid (str): request uuid
+        appointment_date (str): appointment date
+        request_status (str): request status
+        user_uuid (str): user uuid
+
+    Returns:
+        Exception | None: None if the appointment is added successfully, Exception otherwise
+    """
+    user_uuid: UUID = UUID(user_uuid)
+    request_uuid: UUID = UUID(request_uuid)
     appointment_date: datetime = datetime.strptime(appointment_date, '%m/%d/%y %H:%M:%S')
     with conn.cursor() as cur:
         try:
-            cur.execute("UPDATE appointments SET appointment_date = (%s), appointment_status = (%s), teller_uuid = (%s) WHERE appointment_uuid = (%s)", (appointment_date, appointment_status, teller_uuid, appointment_uuid))
+            cur.execute("UPDATE requests SET request_status = (%s) WHERE request_uuid = (%s)", (request_status, request_uuid))
+            cur.execute("INSERT INTO appointments (appointment_date, user_uuid, request_uuid) VALUES (%s, %s, %s)", (appointment_date, user_uuid, request_uuid))
         except Exception:
             return Exception
     conn.commit()
 
-def add_record(appointment_uuid: str, doctor_uuid: str):
-    appointment_uuid: UUID = UUID(appointment_uuid)
-    doctor_uuid: UUID = UUID(doctor_uuid)
-    with conn.cursor() as cur:
-        cur.execute("INSERT INTO records (appointment_uuid, doctor_uuid) VALUES (%s, %s)", (appointment_uuid, doctor_uuid))
-    conn.commit()
-    
-def delete_appointment(user_uuid: str, appointment_uuid: str):
+def add_record(record_content: str, appointment_uuid: str, user_uuid: str):
+    """
+    Adds a new record to the records table
+
+    Args:
+        record_content (str): record content
+        appointment_uuid (str): appointment uuid
+        user_uuid (str): user uuid
+    """
     appointment_uuid: UUID = UUID(appointment_uuid)
     user_uuid: UUID = UUID(user_uuid)
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM appointments WHERE appointment_uuid = (%s) AND user_uuid = (%s)", (appointment_uuid, user_uuid))
+        cur.execute("INSERT INTO records (record_content, user_uuid, appointment_uuid) VALUES (%s, %s, %s)", (record_content, user_uuid, appointment_uuid))
     conn.commit()
+    
+def cancel_request(user_uuid: str, request_uuid: str):
+    """
+    Cancels a request based on the user uuid and request uuid
+
+    Args:
+        user_uuid (str): user uuid
+    """
+    request_uuid: UUID = UUID(request_uuid)
+    user_uuid: UUID = UUID(user_uuid)
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM requests WHERE request_uuid = (%s) AND user_uuid = (%s)", (request_uuid, user_uuid))
+    conn.commit()
+    
+def get_requests() -> List[Tuple[UUID, str, datetime]] | None:
+    """
+    Retrieves all requests from the requests table
+
+    Returns:
+        List[Tuple[UUID, str, datetime]] | None: requests if found, None otherwise
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT request_uuid, request_status, created_at FROM requests")
+        return cur.fetchall()
+
+def get_user_requests(user_uuid) -> List[Tuple[UUID, str, datetime]] | None:
+    """
+    Retrieves all requests for a specific user from the requests table
+
+    Args:
+        user_uuid (str): user uuid
+
+    Returns:
+        List[Tuple[UUID, str, datetime]] | None: requests if found, None otherwise
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT request_uuid, request_status, created_at FROM requests WHERE user_uuid=(%s)", (user_uuid,))
+        return cur.fetchall()
+
+def get_appointments() -> List[Tuple[UUID, str, datetime]] | None:
+    """
+    Retrieves all appointments from the appointments table
+
+    Returns:
+        List[Tuple[UUID, str, datetime]] | None: appointments if found, None otherwise
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT appointment_uuid, CONCAT(user_lname, ', ', user_fname) AS user_name, appointment_date  FROM appointments INNER JOIN users ON appointments.user_uuid = users.user_uuid")
+        return cur.fetchall()
+
+def get_user_appointments(user_uuid) -> List[Tuple[UUID, str, datetime]] | None:
+    """
+    Retrieves all appointments for a specific user from the appointments table
+
+    Args:
+        user_uuid (str): user uuid
+        
+    Returns:
+    List[Tuple[UUID, str, datetime]] | None: appointments if found, None otherwise
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT appointment_uuid, appointment_date FROM appointments INNER JOIN requests ON appointments.request_uuid = requests.request_uuid WHERE requests.user_uuid=(%s)", (user_uuid,))
+        return cur.fetchall()
+
+def get_records() -> List[Tuple[UUID, str, str, datetime]] | None:
+    """
+    Retrieves all records from the records table
+
+    Returns:
+        List[Tuple[UUID, str, str, datetime]] | None: records if found, None otherwise
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT record_uuid, record_content, CONCAT(user_lname, ', ', user_fname) AS user_name, appointment_date FROM appointments INNER JOIN users INNER JOIN records ON records.user_uuid = users.user_uuid ON records.appointment_uuid = appointments.appointment_uuid")
+        return cur.fetchall()
