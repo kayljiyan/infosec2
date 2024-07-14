@@ -1,0 +1,209 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@inject IJSRuntime JS
+@inject NavigationManager NM
+@inject ProtectedLocalStorage ProtectedLocalStore
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@using Newtonsoft.Json
+@using client.Schemas
+@using System.Text
+@using System.Net.Http
+
+<title>Welcome</title>
+<style>
+        .custom-btn:hover {
+            background-color: green;
+            color: white;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        .carousel-control-prev,
+        .carousel-control-next {
+            filter: invert(100%);
+        }
+
+        .carousel-indicators {
+            filter: invert(100%);
+        }
+
+        .carousel-item img {
+            object-fit: cover;
+            width: 100%;
+            height: 100%;
+            display: block;
+            position: relative;
+        }
+
+        .carousel-caption {
+            position: absolute;
+            bottom: 10%;
+            text-align: center;
+            width: 100%;
+        }
+
+        .navbar-fixed-height {
+            height: 56px;
+        }
+
+        #about,
+        #contact {
+            padding-top: 30px;
+        }
+
+        #about::before,
+        #contact::before {
+            content: '';
+            display: block;
+            height: 56px;
+            margin-top: -56px;
+            visibility: hidden;
+        }
+    </style>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-success fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand mb-0 h1 text-light fw-bolder" href="#top">CLINIC APPOINTMENT SYSTEM</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarSupportedContent">
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link text-light" href="#about">About Us</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="btn btn-light rounded-pill ms-4 fw-bold custom-btn" role="button" @onclick="() => GoToLogin()">Login</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="btn btn-light rounded-pill ms-4 fw-bold custom-btn" href="/register" role="button">Register</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div id="top"></div>
+    <div id="carouselExampleControls" class="carousel slide" data-bs-ride="carousel">
+        <div class="carousel-indicators">
+            <button type="button" data-bs-target="#carouselExampleControls" data-bs-slide-to="0" class="active" aria-current="true" aria-label="Slide 1"></button>
+            <button type="button" data-bs-target="#carouselExampleControls" data-bs-slide-to="1" aria-label="Slide 2"></button>
+            <button type="button" data-bs-target="#carouselExampleControls" data-bs-slide-to="2" aria-label="Slide 3"></button>
+        </div>
+
+        <div class="carousel-inner">
+            <div class="carousel-item active">
+                <img src="images/clinic1.jpg" class="d-block w-100">
+            </div>
+            <div class="carousel-item">
+                <img src="images/clinic2.jpg" class="d-block w-100">
+            </div>
+            <div class="carousel-item">
+                <img src="images/clinic3.jpg" class="d-block w-100">
+            </div>
+        </div>
+
+        <button class="carousel-control-prev" type="button" data-bs-target="#carouselExampleControls" data-bs-slide="prev">
+            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+            <span class="visually-hidden">Previous</span>
+        </button>
+        <button class="carousel-control-next" type="button" data-bs-target="#carouselExampleControls" data-bs-slide="next">
+            <span class="carousel-control-next-icon" aria-hidden="true"></span>
+            <span class="visually-hidden">Next</span>
+        </button>
+    </div>
+    <hr class="border border-success border-2 opacity-100">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-6">
+                <section id="about" class="text-start">
+                    <h2 class="fw-bold text-success">About Us</h2>
+                    <p>
+                        To start, my name is Reynald Al Marion D. Saga from the University of Mindanao's CCE College Department, majoring
+                        in BSIT. This is my project for the Sir Hernandez subject (I forgot the actual subject name). I thank my parents, friends, acquaintances,
+                        pets, computer, and the University of Mindanao for helping me through all of this.
+                    </p>
+                </section>
+            </div>
+            <div class="col-md-6">
+                <section id="contact" class="text-end">
+                    <h2 class="fw-bold text-success">Contact Me</h2>
+                    <p class="mb-1">Mobile Number: 0947-615-3402</p>
+                    <p class="mb-1">GCash Contact: 0947-615-3402 (Saga, R.)</p>
+                    <p class="mb-1">E-mail Address: r.saga.523911@umindanao.edu.ph</p>
+                    <p class="mb-1">Fate Grand/Order Account Name: Fulminare</p>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+
+                const targetId = this.getAttribute('href').substring(1);
+                const targetElement = document.getElementById(targetId);
+
+                if (targetElement) {
+                    const headerOffset = 56;
+                    const elementPosition = targetElement.getBoundingClientRect().top;
+                    const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+
+                    window.scrollTo({
+                        top: offsetPosition,
+                        behavior: "smooth"
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+
+@code
+{
+    public class UserToken
+    {
+        public string? token { get; set; }
+    }
+    public async Task<UserToken> GetUserToken()
+    {
+        var token = await JS.InvokeAsync<UserToken>("getusertoken");
+        return token;
+    }
+    public class UserData
+    {
+        public Dictionary<String, String> data { get; set; }
+    }
+    public async Task GoToLogin()
+    {
+        var token = await GetUserToken();
+        if (!string.IsNullOrEmpty(token.token))
+        {
+            NM.NavigateTo("dashboard");
+        } else {
+            NM.NavigateTo("login");
+        }
+    }
+    public async Task<Dictionary<String, String>> GetUserDetails(string token)
+    {
+        using (var http = new HttpClient())
+        {
+            http.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+            var response = await http.GetAsync("http://127.0.0.1:8000/api/v1/deserialize");
+            var responsebody = await response.Content.ReadAsStringAsync();
+            try
+            {
+                response.EnsureSuccessStatusCode();
+                var detail = JsonConvert.DeserializeObject<UserData>(responsebody);
+                return detail.data;
+            } catch (Exception e) {
+                NM.NavigateTo("login");
+                return null;
+            }
+        }
+    }
+}

@@ -1,0 +1,69 @@
+{
+  "Files": [
+    {
+      "Id": "/home/kyleg/code/simple_login/client/obj/Debug/net8.0/scopedcss/projectbundle/client.bundle.scp.css",
+      "PackagePath": "staticwebassets/client.bundle.scp.css"
+    },
+    {
+      "Id": "/home/kyleg/code/simple_login/client/wwwroot/app.css",
+      "PackagePath": "staticwebassets/app.css"
+    },
+    {
+      "Id": "/home/kyleg/code/simple_login/client/wwwroot/bootstrap/bootstrap.min.css",
+      "PackagePath": "staticwebassets/bootstrap/bootstrap.min.css"
+    },
+    {
+      "Id": "/home/kyleg/code/simple_login/client/wwwroot/bootstrap/bootstrap.min.css.map",
+      "PackagePath": "staticwebassets/bootstrap/bootstrap.min.css.map"
+    },
+    {
+      "Id": "/home/kyleg/code/simple_login/client/wwwroot/favicon.png",
+      "PackagePath": "staticwebassets/favicon.png"
+    },
+    {
+      "Id": "/home/kyleg/code/simple_login/client/wwwroot/images/clinic1.jpg",
+      "PackagePath": "staticwebassets/images/clinic1.jpg"
+    },
+    {
+      "Id": "/home/kyleg/code/simple_login/client/wwwroot/images/clinic2.jpg",
+      "PackagePath": "staticwebassets/images/clinic2.jpg"
+    },
+    {
+      "Id": "/home/kyleg/code/simple_login/client/wwwroot/images/clinic3.jpg",
+      "PackagePath": "staticwebassets/images/clinic3.jpg"
+    },
+    {
+      "Id": "/home/kyleg/code/simple_login/client/wwwroot/images/greenbg.png",
+      "PackagePath": "staticwebassets/images/greenbg.png"
+    },
+    {
+      "Id": "/home/kyleg/code/simple_login/client/wwwroot/images/greenbgadmin.jpg",
+      "PackagePath": "staticwebassets/images/greenbgadmin.jpg"
+    },
+    {
+      "Id": "/home/kyleg/code/simple_login/client/wwwroot/images/greencross.jpg",
+      "PackagePath": "staticwebassets/images/greencross.jpg"
+    },
+    {
+      "Id": "/home/kyleg/code/simple_login/client/wwwroot/js/interop.js",
+      "PackagePath": "staticwebassets/js/interop.js"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.build.client.props",
+      "PackagePath": "build\\client.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.buildMultiTargeting.client.props",
+      "PackagePath": "buildMultiTargeting\\client.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.buildTransitive.client.props",
+      "PackagePath": "buildTransitive\\client.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.client.Microsoft.AspNetCore.StaticWebAssets.props",
+      "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssets.props"
+    }
+  ],
+  "ElementsToRemove": []
+}

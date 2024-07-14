@@ -1,0 +1,166 @@
+@rendermode InteractiveServer
+@inject IJSRuntime JS
+@inject NavigationManager NM
+@inject ProtectedLocalStorage ProtectedLocalStore
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@using Newtonsoft.Json
+@using client.Schemas
+@using System.Text
+@using System.Net.Http
+
+<title>Requests</title>
+
+<style>
+    .custom-btn:hover {
+        background-color: green;
+        color: white;
+    }
+
+    .logout-btn:hover {
+        background-color: white;
+        color: red;
+    }
+
+    .request-btn:hover {
+        background-color: white;
+        color: blue;
+    }
+
+    hr {
+        border-top: 1px solid white;
+    }
+
+    .navbar-nav {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        align-items: center;
+    }
+
+        .navbar-nav .nav-item {
+            margin-right: 20px;
+        }
+
+        .navbar-nav .link-btn {
+            text-decoration: none;
+            padding-bottom: 5px;
+            position: relative;
+            color: white;
+            padding: 0.5rem 1rem;
+        }
+
+            .navbar-nav .link-btn::after {
+                content: '';
+                position: absolute;
+                left: 0;
+                bottom: 0;
+                width: 100%;
+                height: 2px;
+                background-color: white;
+                transform: scaleX(0);
+                transform-origin: right;
+                transition: transform 0.3s ease;
+            }
+
+            .navbar-nav .link-btn.active::after,
+            .navbar-nav .link-btn:hover::after {
+                transform: scaleX(1);
+                transform-origin: left;
+            }
+
+
+
+</style>
+
+<section class="container py-3 my-5">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h3 class="card-title fw-bold mb-0">Requests</h3>
+                    <a class="btn btn-primary rounded-pill fw-bold request-btn" href="/create/request" role="button">Create Request</a>
+                </div>
+                <hr class="mt-2" />
+                <div class="card-body bg-success text-light">
+                    <div class="row align-items-start">
+                        <div class="col border border-light text-center">
+                            Request UUID
+                        </div>
+                        <div class="col border border-light text-center">
+                            Request Status
+                        </div>
+                        <div class="col border border-light text-center">
+                            Created At
+                        </div>
+                    </div>
+                    @foreach (Dictionary<string, string> request in request_list)
+                    {
+                        <div class="row align-items-center bg-light text-dark">
+                            <div class="col">
+                                @request["request_uuid"]
+                            </div>
+                            <div class="col">
+                                @request["request_status"]
+                            </div>
+                            <div class="col">
+                                @request["created_at"]
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code
+{
+    public string? user_token { get; set; }
+    [Parameter]
+    public string? user_uuid { get; set; }
+    [Parameter]
+    public string? user_role { get; set; }
+    public List<Dictionary<string, string>> request_list { get; set; } = [new Dictionary<string, string>{{"request_uuid", "sampleid"},{"request_status", "samplecontent"},{"created_at", "updated_at"}}];
+    public class UserToken
+    {
+        public string? token { get; set; }
+    }
+    public async Task<UserToken> GetUserToken()
+    {
+        var token = await JS.InvokeAsync<UserToken>("getusertoken");
+        return token;
+    }
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await GetUserToken();
+        user_token = result.token;
+        await GetUserRequests(user_token, user_uuid);
+    }
+    public async Task GetUserRequests(string token, string user_uuid)
+    {
+        using (var http = new HttpClient())
+        {
+            http.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+            var response = await http.GetAsync($"http://127.0.0.1:8000/api/v1/requests/{user_uuid}");
+            var responsebody = await response.Content.ReadAsStringAsync();
+            try
+            {
+                response.EnsureSuccessStatusCode();
+                Console.WriteLine(responsebody);
+                var requests = JsonConvert.DeserializeObject<RequestData>(responsebody);
+                request_list.Clear();
+                foreach (var request in requests.data)
+                {
+                    request_list.Add(new Dictionary<String, String>{
+                        { "request_uuid", request.request_uuid.ToString() },
+                        { "request_status", request.request_status.ToString() },
+                        { "created_at", request.created_at.ToString() }
+                    });
+                }
+            } catch (Exception e) {
+                Console.WriteLine(e);
+            }
+        }
+    }
+}

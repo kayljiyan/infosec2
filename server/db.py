@@ -10,6 +10,7 @@ import os, psycopg2, schemas
 register_uuid()
 
 user_structure = [ "user_uuid", "user_name", "user_email", "hashed_password", "user_role" ]
+request_structure = [ "request_uuid", "request_status", "created_at" ]
 
 # loads the environment variables
 load_dotenv()
@@ -185,7 +186,13 @@ def get_user_requests(user_uuid) -> List[Tuple[UUID, str, datetime]] | None:
     """
     with conn.cursor() as cur:
         cur.execute("SELECT request_uuid, request_status, created_at FROM requests WHERE user_uuid=(%s)", (user_uuid,))
-        return cur.fetchall()
+        requests = cur.fetchall()
+        request_list = []
+        for request in requests:
+            request_list.append(
+                { request_structure[i] : str(request[i]) for i, _ in enumerate(request)}
+            )
+        return request_list
 
 def get_appointments() -> List[Tuple[UUID, str, datetime]] | None:
     """
@@ -222,3 +229,14 @@ def get_records() -> List[Tuple[UUID, str, str, datetime]] | None:
     with conn.cursor() as cur:
         cur.execute("SELECT record_uuid, record_content, CONCAT(user_lname, ', ', user_fname) AS user_name, appointment_date FROM appointments INNER JOIN users INNER JOIN records ON records.user_uuid = users.user_uuid ON records.appointment_uuid = appointments.appointment_uuid")
         return cur.fetchall()
+    
+def change_password(email: str, password: str):
+    """
+    Changes the password for a user based on their email
+
+    Args:
+        email (str): user email
+        password (str): new password
+    """
+    with conn.cursor() as cur:
+        cur.execute("UPDATE users SET user_password = (%s) WHERE user_email = (%s)", (password, email))

@@ -3,8 +3,8 @@ from fastapi import Depends, FastAPI, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import EmailStr
 from datetime import datetime, timedelta
-from typing import Any, Coroutine, Annotated, List
-import security, db, consts, schemas
+from typing import Coroutine, Annotated
+import security, db, consts, schemas, smtplib, ssl, os
 
 # creates the FastAPI app object
 app: FastAPI = FastAPI()
@@ -12,7 +12,7 @@ app: FastAPI = FastAPI()
 # OAuth2PasswordBearer instance
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/login")
 
-@app.get('/')
+@app.get('/api/v1/deserialize')
 async def index(token: Annotated[str, Depends(oauth2_scheme)], response: Response):
     """
     Index page for the API
@@ -49,18 +49,18 @@ async def register(request: Request, response: Response):
     data: Coroutine[str, str, str, str, EmailStr, str] = await request.json()
     try:
         user = schemas.UserAddToDB(**data)
-        if (security.check_password_strength(user.user_password)):
-            user.user_password = security.encrypt_password(user.user_password)
-            if (db.check_email_exists(user.user_email)):
+        if (db.check_email_exists(user.user_email)):
+            if (security.check_password_strength(user.user_password)):
+                user.user_password = security.encrypt_password(user.user_password)
                 db.insert_new_user(user.user_fname, user.user_lname, user.user_password, user.user_email, user.user_role)
                 response.status_code = status.HTTP_201_CREATED
                 return { "detail": "User created" }
             else:
                 response.status_code = status.HTTP_400_BAD_REQUEST
-                return { "detail": "Email already exists" }
+                return { "detail": "Password is too weak" }
         else:
             response.status_code = status.HTTP_400_BAD_REQUEST
-            return { "detail": "Password is too weak" }
+            return { "detail": "Email already exists" }
     except Exception as e:
         response.status_code = status.HTTP_400_BAD_REQUEST
         return { "detail": str(e) }
@@ -116,6 +116,7 @@ async def get_user_requests(token: Annotated[str, Depends(oauth2_scheme)], user_
         payload = schemas.TokenData(**payload)
         if payload.user_role == "user" and payload.user_uuid == user_uuid:
             data = db.get_user_requests(user_uuid)
+            print(data)
             response.status_code = status.HTTP_200_OK
             return { 'data': data }
         else:
@@ -123,6 +124,7 @@ async def get_user_requests(token: Annotated[str, Depends(oauth2_scheme)], user_
             return { 'detail': "Unauthorized access" }
     except Exception as e:
         response.status_code = status.HTTP_401_UNAUTHORIZED
+        print(e)
         return { "detail": str(e) }
 
 @app.get("/api/v1/appointments")
@@ -247,6 +249,52 @@ async def delete_request(token: Annotated[str, Depends(oauth2_scheme)], request:
     except Exception as e:
         response.status_code = status.HTTP_401_UNAUTHORIZED
         return { "detail": str(e) }
+    
+@app.get("/api/v1/password/{user_email}")
+async def recover_password(user_email: str, response: Response):
+    try:
+        port = os.getenv('SMTP_PORT')
+        smtp_server = os.getenv('SMTP_SERVER')
+        sender_email = os.getenv('SENDER_EMAIL')
+        receiver_email = user_email
+        password = os.getenv('SENDER_PASSWORD')
+        SUBJECT = "Password Recovery Request"
+        TEXT = f"""
+        You can replace your password with the link below.
+        
+        http://localhost:5008/password/{user_email}"""
+        message = 'Subject: {}\n\n{}'.format(SUBJECT, TEXT)
+        context = ssl.create_default_context()
+        with smtplib.SMTP(smtp_server, port) as server:
+            server.starttls(context=context)
+            server.login(sender_email, password)
+            server.sendmail(sender_email, receiver_email, message)
+        data = { "user_email": user_email }
+        access_token_expiry_date = timedelta(minutes=consts.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = security.generate_access_token(data, access_token_expiry_date)
+        response.status_code = status.HTTP_200_OK
+        return {"detail": "Password recovery email sent", "token": access_token}
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"detail": str(e)}
+
+@app.put("/api/v1/password")
+async def change_password(token: Annotated[str, Depends(oauth2_scheme)], request: Request, response: Response):
+    try:
+        data: Coroutine[EmailStr, str] = await request.json()
+        user_email: Coroutine[str] = security.verify_access_token(token)
+        user_email: str = user_email["user_email"]
+        user_password: str = data["password"]
+        if not security.check_password_strength(user_password):
+            response.status_code = status.HTTP_400_BAD_REQUEST
+            return {"detail": "Password is too weak"}
+        user_password = security.encrypt_password(user_password)
+        db.change_password(user_email, user_password)
+        response.status_code = status.HTTP_200_OK
+        return {"detail": "Password has been changed"}
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"detail": str(e)}
 
 if __name__ == '__main__':
     import uvicorn
