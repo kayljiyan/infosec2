@@ -1,4 +1,12 @@
-@page "/appointments"
+@rendermode InteractiveServer
+@inject IJSRuntime JS
+@inject NavigationManager NM
+@inject ProtectedLocalStorage ProtectedLocalStore
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@using Newtonsoft.Json
+@using client.Schemas
+@using System.Text
+@using System.Net.Http
 
 <title>Appointments</title>
 
@@ -74,34 +82,114 @@
                 <div class="card-body bg-success text-light">
                     <div class="row align-items-start">
                         <div class="col border border-light text-center">
-                            Header
+                            UUID
                         </div>
                         <div class="col border border-light text-center">
-                            Header
+                            Remarks
                         </div>
-                        <div class="col border border-light text-center">
-                            Header
-                        </div>
-                        <div class="col border border-light text-center">
-                            Header
-                        </div>
+                        @if (user_role != "user")
+                        {
+                            <div class="col border border-light text-center">
+                                Actions
+                            </div>
+                        }
                     </div>
-                    <div class="row align-items-center bg-light text-dark">
-                        <div class="col">
-                            Content
+                    @foreach (Dictionary<string, string> appointment in appointment_list)
+                    {
+                        var appointment_uuid = @appointment["appointment_uuid"];
+                        var record_uri = $"/create/record/{appointment_uuid}";
+                        <div class="row align-items-center bg-light text-dark">
+                            <div class="col">
+                                @appointment["appointment_uuid"]
+                            </div>
+                            <div class="col text-center">
+                                @appointment["appointment_remarks"]
+                            </div>
+                            @if (user_role != "user")
+                            {
+                                <div class="col text-center">
+                                    <a class="btn btn-success rounded-pill fw-bold request-btn" role="button" @onclick="() => RecordAppointment(record_uri)">Record</a>
+                                </div>
+                            }
                         </div>
-                        <div class="col">
-                            Content
-                        </div>
-                        <div class="col">
-                            Content
-                        </div>
-                        <div class="col">
-                            Content
-                        </div>
-                    </div>
+                    }
                 </div>
             </div>
         </div>
     </div>
 </section>
+
+@code
+{
+    public string? user_token { get; set; }
+    [Parameter]
+    public string? user_uuid { get; set; }
+    [Parameter]
+    public string? user_role { get; set; }
+    public List<Dictionary<string, string>> appointment_list { get; set; } = [new Dictionary<string, string>{{"appointment_uuid", "sampleid"},{"appointment_remarks", "sample"}}];
+    public class UserToken
+    {
+        public string? token { get; set; }
+    }
+    public async Task<UserToken> GetUserToken()
+    {
+        var token = await JS.InvokeAsync<UserToken>("getusertoken");
+        return token;
+    }
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await GetUserToken();
+        user_token = result.token;
+        await GetUserAppointments(user_token, user_uuid);
+    }
+    public async Task GetUserAppointments(string token, string user_uuid)
+    {
+        using (var http = new HttpClient())
+        {
+            if (user_role == "user")
+            {
+                http.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+                var response = await http.GetAsync($"http://127.0.0.1:8000/api/v1/appointments/{user_uuid}");
+                var responsebody = await response.Content.ReadAsStringAsync();
+                try
+                {
+                    response.EnsureSuccessStatusCode();
+                    var appointments = JsonConvert.DeserializeObject<AppointmentData>(responsebody);
+                    appointment_list.Clear();
+                    foreach (var appointment in appointments.data)
+                    {
+                        appointment_list.Add(new Dictionary<string, string>{
+                            { "appointment_uuid", appointment.appointment_uuid.ToString() },
+                            { "appointment_remarks", appointment.appointment_remarks.ToString() }
+                        });
+                    }
+                } catch (Exception e) {
+                    Console.WriteLine(e);
+                }
+            } else {
+                http.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+                var response = await http.GetAsync($"http://127.0.0.1:8000/api/v1/appointments");
+                var responsebody = await response.Content.ReadAsStringAsync();
+                try
+                {
+                    response.EnsureSuccessStatusCode();
+                    var appointments = JsonConvert.DeserializeObject<AppointmentData>(responsebody);
+                    appointment_list.Clear();
+                    foreach (var appointment in appointments.data)
+                    {
+                        appointment_list.Add(new Dictionary<string, string>{
+                            { "appointment_uuid", appointment.appointment_uuid.ToString() },
+                            { "appointment_remarks", appointment.appointment_remarks.ToString() }
+                        });
+                    }
+                } catch (Exception e) {
+                    Console.WriteLine(e);
+                }
+            }
+        }
+    }
+    public async Task RecordAppointment(string record_uri)
+    {
+        NM.NavigateTo(record_uri);
+    }
+}

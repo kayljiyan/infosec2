@@ -164,13 +164,9 @@ async def get_records(token: Annotated[str, Depends(oauth2_scheme)], response: R
     try:
         payload = security.verify_access_token(token)
         payload = schemas.TokenData(**payload)
-        if payload.user_role == "teller" or payload.user_role == "doctor":
-            data = db.get_records()
-            response.status_code = status.HTTP_200_OK
-            return { 'data': data }
-        else:
-            response.status_code = status.HTTP_403_FORBIDDEN
-            return { 'detail': "Unauthorized access" }
+        data = db.get_records()
+        response.status_code = status.HTTP_200_OK
+        return { 'data': data }
     except Exception as e:
         response.status_code = status.HTTP_401_UNAUTHORIZED
         return { "detail": str(e) }

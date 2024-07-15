@@ -11,6 +11,8 @@ register_uuid()
 
 user_structure = [ "user_uuid", "user_name", "user_email", "hashed_password", "user_role" ]
 request_structure = [ "request_uuid", "request_status", "created_at" ]
+appointment_structure = [ "appointment_uuid", "appointment_remarks" ]
+record_structure = [ "record_uuid", "record_content", "doctor_name", "patient_name"]
 
 # loads the environment variables
 load_dotenv()
@@ -208,8 +210,15 @@ def get_appointments() -> List[Tuple[UUID, str]] | None:
         List[Tuple[UUID, str, datetime]] | None: appointments if found, None otherwise
     """
     with conn.cursor() as cur:
-        cur.execute("SELECT appointment_uuid, CONCAT(user_lname, ', ', user_fname) AS user_name, appointment_remarks  FROM appointments INNER JOIN users ON appointments.user_uuid = users.user_uuid")
-        return cur.fetchall()
+        cur.execute("SELECT appointment_uuid, appointment_remarks  FROM appointments INNER JOIN users ON appointments.user_uuid = users.user_uuid")
+        appointments = cur.fetchall()
+        appointment_list = []
+        for appointment in appointments:
+            appointment_list.append(
+                { appointment_structure[i] : str(appointment[i]) for i, _ in enumerate(appointment)}
+            )
+        print(appointment_list)
+        return appointment_list
 
 def get_user_appointments(user_uuid) -> List[Tuple[UUID, str]] | None:
     """
@@ -223,7 +232,13 @@ def get_user_appointments(user_uuid) -> List[Tuple[UUID, str]] | None:
     """
     with conn.cursor() as cur:
         cur.execute("SELECT appointment_uuid, appointment_remarks FROM appointments INNER JOIN requests ON appointments.request_uuid = requests.request_uuid WHERE requests.user_uuid=(%s)", (user_uuid,))
-        return cur.fetchall()
+        appointments = cur.fetchall()
+        appointment_list = []
+        for appointment in appointments:
+            appointment_list.append(
+                { appointment_structure[i] : str(appointment[i]) for i, _ in enumerate(appointment)}
+            )
+        return appointment_list
 
 def get_records() -> List[Tuple[UUID, str, str, datetime]] | None:
     """
@@ -233,8 +248,33 @@ def get_records() -> List[Tuple[UUID, str, str, datetime]] | None:
         List[Tuple[UUID, str, str, datetime]] | None: records if found, None otherwise
     """
     with conn.cursor() as cur:
-        cur.execute("SELECT record_uuid, record_content, CONCAT(user_lname, ', ', user_fname) AS user_name, appointment_date FROM appointments INNER JOIN users INNER JOIN records ON records.user_uuid = users.user_uuid ON records.appointment_uuid = appointments.appointment_uuid")
-        return cur.fetchall()
+        cur.execute("SELECT record_uuid, record_content, CONCAT(user_lname, ', ', user_fname) AS user_name FROM users INNER JOIN records ON records.user_uuid = users.user_uuid")
+        records = cur.fetchall()
+        records_list = []
+        for record in records:
+            cur.execute("""
+                SELECT CONCAT(user_fname, ', ', user_lname) AS user_name
+                FROM users
+                WHERE user_uuid = (
+                    SELECT requests.user_uuid
+                    FROM requests INNER JOIN appointments
+                    ON requests.request_uuid = appointments.request_uuid
+                    WHERE appointment_uuid = (
+                        SELECT appointments.appointment_uuid
+                        FROM appointments INNER JOIN records
+                        ON appointments.appointment_uuid = records.appointment_uuid
+                        WHERE record_uuid = (%s)
+                    )
+                )
+                """,
+                (record[0],))
+            patient_name = cur.fetchone()
+            record += (patient_name[0],)
+            records_list.append(
+                { record_structure[i] : str(record[i]) for i, _ in enumerate(record)}
+            )
+        print(records_list)
+        return records_list
     
 def change_password(email: str, password: str):
     """

@@ -1,4 +1,12 @@
-@page "/profile"
+@rendermode InteractiveServer
+@inject IJSRuntime JS
+@inject NavigationManager NM
+@inject ProtectedLocalStorage ProtectedLocalStore
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@using Newtonsoft.Json
+@using client.Schemas
+@using System.Text
+@using System.Net.Http
 
 <title>Profile</title>
 
@@ -69,34 +77,35 @@
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
                     <h3 class="card-title fw-bold mb-0">Profile</h3>
+                    <a class="btn btn-primary rounded-pill fw-bold request-btn" role="button" @onclick="() => ChangePassword(user_email)">Change Password</a>
                 </div>
                 <hr class="mt-2" />
                 <div class="card-body bg-success text-light">
                     <div class="row align-items-start">
                         <div class="col border border-light text-center">
-                            User UUID
+                            UUID
+                        </div>
+                        @* <div class="col border border-light text-center">
+                            Email
+                        </div> *@
+                        <div class="col border border-light text-center">
+                            Name
                         </div>
                         <div class="col border border-light text-center">
-                            User Email
-                        </div>
-                        <div class="col border border-light text-center">
-                            User Name
-                        </div>
-                        <div class="col border border-light text-center">
-                            User Role
+                            Role
                         </div>
                     </div>
                     <div class="row align-items-center bg-light text-dark">
                         <div class="col">
                             @user_uuid
                         </div>
-                        <div class="col">
+                        @* <div class="col text-center">
                             @user_email
-                        </div>
-                        <div class="col">
+                        </div> *@
+                        <div class="col text-center">
                             @user_name
                         </div>
-                        <div class="col">
+                        <div class="col text-center">
                             @user_role
                         </div>
                     </div>
@@ -116,4 +125,32 @@
     public string? user_email { get; set; }
     [Parameter]
     public string? user_role { get; set; }
+    public async Task SetEmailToken(string token)
+    {
+        await JS.InvokeVoidAsync("setemailtoken", token);
+    }
+    public async Task ChangePassword(string user_email)
+    {
+        using (var http = new HttpClient())
+        {
+            if (!string.IsNullOrWhiteSpace(user_email))
+            {
+                var uri = $"http://127.0.0.1:8000/api/v1/password/{user_email}";
+                var response = await http.GetAsync(uri.ToString());
+                var responsebody = await response.Content.ReadAsStringAsync();
+                try
+                {
+                    response.EnsureSuccessStatusCode();
+                    var detail = JsonConvert.DeserializeObject<Recovery>(responsebody);
+                    Console.WriteLine(detail.detail);
+                    await SetEmailToken(detail.token);
+                } catch (Exception e) {
+                    var detail = JsonConvert.DeserializeObject<Detail>(responsebody);
+                    Console.WriteLine(detail.detail);
+                }
+            } else {
+                Console.WriteLine("missing credentials");
+            }
+        }
+    }
 }

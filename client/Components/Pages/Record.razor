@@ -1,4 +1,12 @@
-@page "/records"
+@rendermode InteractiveServer
+@inject IJSRuntime JS
+@inject NavigationManager NM
+@inject ProtectedLocalStorage ProtectedLocalStore
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@using Newtonsoft.Json
+@using client.Schemas
+@using System.Text
+@using System.Net.Http
 
 <title>Records</title>
 
@@ -69,46 +77,118 @@
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
                     <h3 class="card-title fw-bold mb-0">Records</h3>
-                    <a class="btn btn-primary rounded-pill fw-bold request-btn" href="/create/record" role="button">Create Record</a>
                 </div>
                 <hr class="mt-2" />
                 <div class="card-body bg-success text-light">
-                    <div class="row align-items-start">
+                <div class="row align-items-start">
                         <div class="col border border-light text-center">
-                            Header
+                            UUID
                         </div>
                         <div class="col border border-light text-center">
-                            Header
+                            Remarks
                         </div>
                         <div class="col border border-light text-center">
-                            Header
+                            Patient
                         </div>
                         <div class="col border border-light text-center">
-                            Header
-                        </div>
-                        <div class="col border border-light text-center">
-                            Header
+                            Doctor
                         </div>
                     </div>
-                    <div class="row align-items-center bg-light text-dark">
-                        <div class="col">
-                            Content
+                    @foreach (Dictionary<string, string> record in record_list)
+                    {
+                        var record_uuid = @record["record_uuid"];
+                        <div class="row align-items-center bg-light text-dark">
+                            <div class="col">
+                                @record["record_uuid"]
+                            </div>
+                            <div class="col text-center">
+                                @record["record_content"]
+                            </div>
+                            <div class="col text-center">
+                                @record["patient_name"]
+                            </div>
+                            <div class="col text-center">
+                                @record["doctor_name"]
+                            </div>
                         </div>
-                        <div class="col">
-                            Content
-                        </div>
-                        <div class="col">
-                            Content
-                        </div>
-                        <div class="col">
-                            Content
-                        </div>
-                        <div class="col">
-                            Content
-                        </div>
-                    </div>
+                    }
                 </div>
             </div>
         </div>
     </div>
 </section>
+
+@code
+{
+    public string? user_token { get; set; }
+    [Parameter]
+    public string? user_uuid { get; set; }
+    [Parameter]
+    public string? user_role { get; set; }
+    public List<Dictionary<string, string>> record_list { get; set; } = [new Dictionary<string, string>{{"record_uuid", "sampleid"},{"record_content", "sample"},{"patient_name", "sample"},{"doctor_name", "sample"}}];
+    public class UserToken
+    {
+        public string? token { get; set; }
+    }
+    public async Task<UserToken> GetUserToken()
+    {
+        var token = await JS.InvokeAsync<UserToken>("getusertoken");
+        return token;
+    }
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await GetUserToken();
+        user_token = result.token;
+        await GetUserRecords(user_token);
+    }
+    public async Task GetUserRecords(string token)
+    {
+        using (var http = new HttpClient())
+        {
+            if (user_role != "user")
+            {
+                http.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+                var response = await http.GetAsync($"http://127.0.0.1:8000/api/v1/records");
+                var responsebody = await response.Content.ReadAsStringAsync();
+                try
+                {
+                    response.EnsureSuccessStatusCode();
+                    var records = JsonConvert.DeserializeObject<RecordData>(responsebody);
+                    record_list.Clear();
+                    foreach (var record in records.data)
+                    {
+                        record_list.Add(new Dictionary<string, string>{
+                            { "record_uuid", record.record_uuid.ToString() },
+                            { "record_content", record.record_content.ToString() },
+                            { "doctor_name", record.doctor_name.ToString() },
+                            { "patient_name", record.patient_name.ToString() }
+                        });
+                    }
+                } catch (Exception e) {
+                    Console.WriteLine(e);
+                }
+            } else {
+                http.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+                var response = await http.GetAsync($"http://127.0.0.1:8000/api/v1/records");
+                var responsebody = await response.Content.ReadAsStringAsync();
+                try
+                {
+                    response.EnsureSuccessStatusCode();
+                    var records = JsonConvert.DeserializeObject<RecordData>(responsebody);
+                    record_list.Clear();
+                    foreach (var record in records.data)
+                    {
+                        record_list.Add(new Dictionary<string, string>{
+                            { "record_uuid", record.record_uuid.ToString() },
+                            { "record_content", record.record_content.ToString() },
+                            { "doctor_name", record.doctor_name.ToString() },
+                            { "patient_name", record.patient_name.ToString() }
+                        });
+                    }
+                } catch (Exception e) {
+                    Console.WriteLine(e);
+                }
+            }
+        }
+    }
+}

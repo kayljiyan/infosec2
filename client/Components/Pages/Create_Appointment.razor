@@ -129,26 +129,32 @@
         user_token = result.token;
         using (var http = new HttpClient())
         {
-            var appointment = new Dictionary<string, string>{
-                { "request_uuid", request_uuid },
-                { "appointment_remarks", appointment_remarks },
-                { "request_status", request_status }
-            };
-            var AppointmentJSON = JsonConvert.SerializeObject(appointment);
-            http.DefaultRequestHeaders.Add("Authorization", $"Bearer {user_token}");
-            HttpContent postparams = new StringContent(AppointmentJSON, Encoding.UTF8, "application/json");
-            var response = await http.PostAsync("http://127.0.0.1:8000/api/v1/appointment", postparams);
-            var responsebody = await response.Content.ReadAsStringAsync();
-            try
+            if (!string.IsNullOrEmpty(request_status) && !string.IsNullOrEmpty(appointment_remarks))
             {
-                response.EnsureSuccessStatusCode();
-                var detail = JsonConvert.DeserializeObject<Detail>(responsebody);
-                Console.WriteLine(detail.detail);
-                NM.NavigateTo("dashboard");
-            } catch (Exception e) {
-                var detail = JsonConvert.DeserializeObject<Detail>(responsebody);
-                Console.WriteLine(detail.detail);
+                var appointment = new Dictionary<string, string>{
+                    { "request_uuid", request_uuid },
+                    { "appointment_remarks", appointment_remarks },
+                    { "request_status", request_status }
+                };
+                var AppointmentJSON = JsonConvert.SerializeObject(appointment);
+                http.DefaultRequestHeaders.Add("Authorization", $"Bearer {user_token}");
+                HttpContent postparams = new StringContent(AppointmentJSON, Encoding.UTF8, "application/json");
+                var response = await http.PostAsync("http://127.0.0.1:8000/api/v1/appointment", postparams);
+                var responsebody = await response.Content.ReadAsStringAsync();
+                try
+                {
+                    response.EnsureSuccessStatusCode();
+                    var detail = JsonConvert.DeserializeObject<Detail>(responsebody);
+                    Console.WriteLine(detail.detail);
+                    NM.NavigateTo("dashboard");
+                } catch (Exception e) {
+                    var detail = JsonConvert.DeserializeObject<Detail>(responsebody);
+                    Console.WriteLine(detail.detail);
+                }
+            } else {
+                Console.WriteLine("missing fields");
             }
+            
         }
     }
 }
