@@ -232,15 +232,14 @@ async def add_record(token: Annotated[str, Depends(oauth2_scheme)], request: Req
         response.status_code = status.HTTP_401_UNAUTHORIZED
         return { "detail": str(e) }
 
-@app.delete("/api/v1/request")
-async def delete_request(token: Annotated[str, Depends(oauth2_scheme)], request: Request, response: Response):
+@app.delete("/api/v1/request/{request_uuid}")
+async def delete_request(token: Annotated[str, Depends(oauth2_scheme)], request_uuid: str, response: Response):
     try:
         payload = security.verify_access_token(token)
         payload = schemas.TokenData(**payload)
         if payload.user_role == "user":
             user_uuid = payload.user_uuid
-            data: Coroutine[str] = await request.json()
-            db.cancel_request(user_uuid, data["request_uuid"])
+            db.cancel_request(user_uuid, request_uuid)
             response.status_code = status.HTTP_200_OK
             return { 'detail': "Request has been deleted" }
         else:

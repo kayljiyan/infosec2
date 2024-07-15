@@ -79,7 +79,7 @@
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
                     <h3 class="card-title fw-bold mb-0">Requests</h3>
-                    <a class="btn btn-primary rounded-pill fw-bold request-btn" href="/create/request" role="button">Create Request</a>
+                    <a class="btn btn-primary rounded-pill fw-bold request-btn" role="button" @onclick="() => CreateRequest(user_uuid)">Create Request</a>
                 </div>
                 <hr class="mt-2" />
                 <div class="card-body bg-success text-light">
@@ -93,9 +93,13 @@
                         <div class="col border border-light text-center">
                             Created At
                         </div>
+                        <div class="col border border-light text-center">
+                            Actions
+                        </div>
                     </div>
                     @foreach (Dictionary<string, string> request in request_list)
                     {
+                        var request_uuid = @request["request_uuid"];
                         <div class="row align-items-center bg-light text-dark">
                             <div class="col">
                                 @request["request_uuid"]
@@ -105,6 +109,9 @@
                             </div>
                             <div class="col">
                                 @request["created_at"]
+                            </div>
+                            <div class="col">
+                                <a class="btn btn-danger rounded-pill fw-bold request-btn" @onclick="() => DeleteRequest(request_uuid, user_uuid)" role="button">Delete</a>
                             </div>
                         </div>
                     }
@@ -147,7 +154,6 @@
             try
             {
                 response.EnsureSuccessStatusCode();
-                Console.WriteLine(responsebody);
                 var requests = JsonConvert.DeserializeObject<RequestData>(responsebody);
                 request_list.Clear();
                 foreach (var request in requests.data)
@@ -158,6 +164,45 @@
                         { "created_at", request.created_at.ToString() }
                     });
                 }
+            } catch (Exception e) {
+                Console.WriteLine(e);
+            }
+        }
+    }
+    public async Task CreateRequest(string user_uuid)
+    {
+        var result = await GetUserToken();
+        user_token = result.token;
+        using (var http = new HttpClient())
+        {
+            HttpContent dummy_body = new StringContent("", Encoding.UTF8, "application/json");
+            http.DefaultRequestHeaders.Add("Authorization", $"Bearer {user_token}");
+            var response = await http.PostAsync($"http://127.0.0.1:8000/api/v1/request", dummy_body);
+            var responsebody = await response.Content.ReadAsStringAsync();
+            try
+            {
+                response.EnsureSuccessStatusCode();
+                var detail = JsonConvert.DeserializeObject<Detail>(responsebody);
+                await GetUserRequests(user_token, user_uuid);
+            } catch (Exception e) {
+                Console.WriteLine(e);
+            }
+        }
+    }
+    public async Task DeleteRequest(string request_uuid, string user_uuid)
+    {
+        var result = await GetUserToken();
+        user_token = result.token;
+        using (var http = new HttpClient())
+        {
+            http.DefaultRequestHeaders.Add("Authorization", $"Bearer {user_token}");
+            var response = await http.DeleteAsync($"http://127.0.0.1:8000/api/v1/request/{request_uuid}");
+            var responsebody = await response.Content.ReadAsStringAsync();
+            try
+            {
+                response.EnsureSuccessStatusCode();
+                var detail = JsonConvert.DeserializeObject<Detail>(responsebody);
+                await GetUserRequests(user_token, user_uuid);
             } catch (Exception e) {
                 Console.WriteLine(e);
             }
