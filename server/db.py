@@ -111,7 +111,7 @@ def add_request(user_uuid: str):
         cur.execute("INSERT INTO requests (user_uuid) VALUES (%s)", (user_uuid,))
     conn.commit()
 
-def add_appointment(request_uuid: str, appointment_date: str, request_status: str, user_uuid: str) -> Exception | None:
+def add_appointment(request_uuid: str, appointment_remarks: str, request_status: str, user_uuid: str) -> Exception | None:
     """
     Adds a new appointment to the appointments table
 
@@ -126,12 +126,12 @@ def add_appointment(request_uuid: str, appointment_date: str, request_status: st
     """
     user_uuid: UUID = UUID(user_uuid)
     request_uuid: UUID = UUID(request_uuid)
-    appointment_date: datetime = datetime.strptime(appointment_date, '%m/%d/%y %H:%M:%S')
     with conn.cursor() as cur:
         try:
             cur.execute("UPDATE requests SET request_status = (%s) WHERE request_uuid = (%s)", (request_status, request_uuid))
-            cur.execute("INSERT INTO appointments (appointment_date, user_uuid, request_uuid) VALUES (%s, %s, %s)", (appointment_date, user_uuid, request_uuid))
-        except Exception:
+            cur.execute("INSERT INTO appointments (appointment_remarks, user_uuid, request_uuid) VALUES (%s, %s, %s)", (appointment_remarks, user_uuid, request_uuid))
+        except Exception as e:
+            print(str(e))
             return Exception
     conn.commit()
 
@@ -172,7 +172,13 @@ def get_requests() -> List[Tuple[UUID, str, datetime]] | None:
     """
     with conn.cursor() as cur:
         cur.execute("SELECT request_uuid, request_status, created_at FROM requests")
-        return cur.fetchall()
+        requests = cur.fetchall()
+        request_list = []
+        for request in requests:
+            request_list.append(
+                { request_structure[i] : str(request[i]) for i, _ in enumerate(request)}
+            )
+        return request_list
 
 def get_user_requests(user_uuid) -> List[Tuple[UUID, str, datetime]] | None:
     """
@@ -194,7 +200,7 @@ def get_user_requests(user_uuid) -> List[Tuple[UUID, str, datetime]] | None:
             )
         return request_list
 
-def get_appointments() -> List[Tuple[UUID, str, datetime]] | None:
+def get_appointments() -> List[Tuple[UUID, str]] | None:
     """
     Retrieves all appointments from the appointments table
 
@@ -202,10 +208,10 @@ def get_appointments() -> List[Tuple[UUID, str, datetime]] | None:
         List[Tuple[UUID, str, datetime]] | None: appointments if found, None otherwise
     """
     with conn.cursor() as cur:
-        cur.execute("SELECT appointment_uuid, CONCAT(user_lname, ', ', user_fname) AS user_name, appointment_date  FROM appointments INNER JOIN users ON appointments.user_uuid = users.user_uuid")
+        cur.execute("SELECT appointment_uuid, CONCAT(user_lname, ', ', user_fname) AS user_name, appointment_remarks  FROM appointments INNER JOIN users ON appointments.user_uuid = users.user_uuid")
         return cur.fetchall()
 
-def get_user_appointments(user_uuid) -> List[Tuple[UUID, str, datetime]] | None:
+def get_user_appointments(user_uuid) -> List[Tuple[UUID, str]] | None:
     """
     Retrieves all appointments for a specific user from the appointments table
 
@@ -216,7 +222,7 @@ def get_user_appointments(user_uuid) -> List[Tuple[UUID, str, datetime]] | None:
     List[Tuple[UUID, str, datetime]] | None: appointments if found, None otherwise
     """
     with conn.cursor() as cur:
-        cur.execute("SELECT appointment_uuid, appointment_date FROM appointments INNER JOIN requests ON appointments.request_uuid = requests.request_uuid WHERE requests.user_uuid=(%s)", (user_uuid,))
+        cur.execute("SELECT appointment_uuid, appointment_remarks FROM appointments INNER JOIN requests ON appointments.request_uuid = requests.request_uuid WHERE requests.user_uuid=(%s)", (user_uuid,))
         return cur.fetchall()
 
 def get_records() -> List[Tuple[UUID, str, str, datetime]] | None:

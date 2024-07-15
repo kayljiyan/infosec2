@@ -200,7 +200,7 @@ async def add_appointment(token: Annotated[str, Depends(oauth2_scheme)], request
         if payload.user_role == "teller":
             user_uuid = payload.user_uuid
             data: Coroutine[str, datetime, str] = await request.json()
-            query_result = db.add_appointment(data["request_uuid"], data["appointment_date"], data["request_status"], user_uuid)
+            query_result = db.add_appointment(data["request_uuid"], data["appointment_remarks"], data["request_status"], user_uuid)
             if (query_result is None):
                 response.status_code = status.HTTP_200_OK
                 return { 'detail': "Appointment added" }

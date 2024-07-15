@@ -79,7 +79,10 @@
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
                     <h3 class="card-title fw-bold mb-0">Requests</h3>
-                    <a class="btn btn-primary rounded-pill fw-bold request-btn" role="button" @onclick="() => CreateRequest(user_uuid)">Create Request</a>
+                    @if (user_role == "user")
+                    {
+                        <a class="btn btn-primary rounded-pill fw-bold request-btn" role="button" @onclick="() => CreateRequest(user_uuid)">Create Request</a>
+                    }
                 </div>
                 <hr class="mt-2" />
                 <div class="card-body bg-success text-light">
@@ -100,18 +103,24 @@
                     @foreach (Dictionary<string, string> request in request_list)
                     {
                         var request_uuid = @request["request_uuid"];
+                        var appoint_uuid = $"/create/appointment/{request_uuid}";
                         <div class="row align-items-center bg-light text-dark">
                             <div class="col">
                                 @request["request_uuid"]
                             </div>
-                            <div class="col">
+                            <div class="col text-center">
                                 @request["request_status"]
                             </div>
                             <div class="col">
                                 @request["created_at"]
                             </div>
-                            <div class="col">
-                                <a class="btn btn-danger rounded-pill fw-bold request-btn" @onclick="() => DeleteRequest(request_uuid, user_uuid)" role="button">Delete</a>
+                            <div class="col text-center">
+                                @if (user_role == "teller")
+                                {
+                                    <a class="btn btn-primary rounded-pill fw-bold request-btn" @onclick="() => AppointRequest(appoint_uuid)" role="button">Appoint</a>
+                                } else if (user_role == "user") {
+                                    <a class="btn btn-danger rounded-pill fw-bold request-btn" @onclick="() => DeleteRequest(request_uuid, user_uuid)" role="button">Delete</a>
+                                }
                             </div>
                         </div>
                     }
@@ -148,24 +157,47 @@
     {
         using (var http = new HttpClient())
         {
-            http.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
-            var response = await http.GetAsync($"http://127.0.0.1:8000/api/v1/requests/{user_uuid}");
-            var responsebody = await response.Content.ReadAsStringAsync();
-            try
+            if (user_role == "user")
             {
-                response.EnsureSuccessStatusCode();
-                var requests = JsonConvert.DeserializeObject<RequestData>(responsebody);
-                request_list.Clear();
-                foreach (var request in requests.data)
+                http.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+                var response = await http.GetAsync($"http://127.0.0.1:8000/api/v1/requests/{user_uuid}");
+                var responsebody = await response.Content.ReadAsStringAsync();
+                try
                 {
-                    request_list.Add(new Dictionary<String, String>{
-                        { "request_uuid", request.request_uuid.ToString() },
-                        { "request_status", request.request_status.ToString() },
-                        { "created_at", request.created_at.ToString() }
-                    });
+                    response.EnsureSuccessStatusCode();
+                    var requests = JsonConvert.DeserializeObject<RequestData>(responsebody);
+                    request_list.Clear();
+                    foreach (var request in requests.data)
+                    {
+                        request_list.Add(new Dictionary<String, String>{
+                            { "request_uuid", request.request_uuid.ToString() },
+                            { "request_status", request.request_status.ToString() },
+                            { "created_at", request.created_at.ToString() }
+                        });
+                    }
+                } catch (Exception e) {
+                    Console.WriteLine(e);
                 }
-            } catch (Exception e) {
-                Console.WriteLine(e);
+            } else {
+                http.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+                var response = await http.GetAsync($"http://127.0.0.1:8000/api/v1/requests");
+                var responsebody = await response.Content.ReadAsStringAsync();
+                try
+                {
+                    response.EnsureSuccessStatusCode();
+                    var requests = JsonConvert.DeserializeObject<RequestData>(responsebody);
+                    request_list.Clear();
+                    foreach (var request in requests.data)
+                    {
+                        request_list.Add(new Dictionary<String, String>{
+                            { "request_uuid", request.request_uuid.ToString() },
+                            { "request_status", request.request_status.ToString() },
+                            { "created_at", request.created_at.ToString() }
+                        });
+                    }
+                } catch (Exception e) {
+                    Console.WriteLine(e);
+                }
             }
         }
     }
@@ -207,5 +239,9 @@
                 Console.WriteLine(e);
             }
         }
+    }
+    public async Task AppointRequest(string appoint_uri)
+    {
+        NM.NavigateTo(appoint_uri);
     }
 }

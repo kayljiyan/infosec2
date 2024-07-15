@@ -1,4 +1,11 @@
-@page "/create/appointment"
+@page "/create/appointment/{request_uuid}"
+@rendermode InteractiveServer
+@inject IJSRuntime JS
+@inject NavigationManager NM
+@using Newtonsoft.Json
+@using client.Schemas
+@using System.Text
+@using System.Net.Http
 
 <title>Appointment Creation</title>
 
@@ -61,7 +68,7 @@
         <div class="collapse navbar-collapse" id="navbarSupportedContent">
             <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
                 <li class="nav-item">
-                    <a class="link-btn text-light ms-2 fw-bold" href="/appointments" role="button">Return to Appointments Page</a>
+                    <a class="link-btn text-light ms-2 fw-bold" href="/dashboard" role="button">Return to Dashboard</a>
                 </li>
             </ul>
         </div>
@@ -74,28 +81,74 @@
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
                     <h3 class="card-title fw-bold mb-0">Appointment Creation</h3>
-                    <a class="btn btn-primary rounded-pill fw-bold request-btn" href="/" role="button">Submit Appointment</a>
+                    <a class="btn btn-primary rounded-pill fw-bold request-btn" role="button" @onclick="() => CreateAppointment(request_uuid, request_status, appointment_remarks)">Submit Appointment</a>
                 </div>
                 </div>
                 <hr class="mt-2" />
                 <div class="card-body bg-info text-light">
                     <div class="form-group">
-                        <label for="field1">Field 1</label>
-                        <input type="text" class="form-control" id="field1" placeholder="Enter information">
+                        <label for="field1">Request UUID</label>
+                        <input type="text" class="form-control" id="field1" placeholder=@request_uuid readonly>
                     </div>
                     <div class="form-group">
-                        <label for="field2">Field 2</label>
-                        <input type="text" class="form-control" id="field2" placeholder="Enter information">
+                        <label for="field2">Appointment Remarks</label>
+                        <textarea type="text" class="form-control" id="field2" rows="8" placeholder="Enter doctor name and appointment date" @bind="appointment_remarks"/>
                     </div>
                     <div class="form-group">
-                        <label for="field3">Field 3</label>
-                        <input type="text" class="form-control" id="field3" placeholder="Enter information">
-                    </div>
-                    <div class="form-group">
-                        <label for="field4">Field 4</label>
-                        <input type="text" class="form-control" id="field4" placeholder="Enter information">
+                        <label for="field3">Request Status</label>
+                        <input type="text" class="form-control" id="field3" placeholder="Enter request status" @bind="request_status">
                     </div>
                 </div>
             </div>
         </div>
 </section>
+
+@code
+{
+    [Parameter]
+    public string? request_uuid { get; set; }
+    public string? request_status { get; set; }
+    public string? user_token { get; set; }
+    public string? appointment_remarks { get; set; }
+    protected override void OnParametersSet()
+    {
+        request_uuid = request_uuid ?? "no uuid";
+    }
+    public class UserToken
+    {
+        public string? token { get; set; }
+    }
+    public async Task<UserToken> GetUserToken()
+    {
+        var token = await JS.InvokeAsync<UserToken>("getusertoken");
+        return token;
+    }
+    public async Task CreateAppointment(string request_uuid, string request_status, string appointment_remarks)
+    {
+        var result = await GetUserToken();
+        user_token = result.token;
+        using (var http = new HttpClient())
+        {
+            var appointment = new Dictionary<string, string>{
+                { "request_uuid", request_uuid },
+                { "appointment_remarks", appointment_remarks },
+                { "request_status", request_status }
+            };
+            var AppointmentJSON = JsonConvert.SerializeObject(appointment);
+            http.DefaultRequestHeaders.Add("Authorization", $"Bearer {user_token}");
+            HttpContent postparams = new StringContent(AppointmentJSON, Encoding.UTF8, "application/json");
+            var response = await http.PostAsync("http://127.0.0.1:8000/api/v1/appointment", postparams);
+            var responsebody = await response.Content.ReadAsStringAsync();
+            try
+            {
+                response.EnsureSuccessStatusCode();
+                var detail = JsonConvert.DeserializeObject<Detail>(responsebody);
+                Console.WriteLine(detail.detail);
+                NM.NavigateTo("dashboard");
+            } catch (Exception e) {
+                var detail = JsonConvert.DeserializeObject<Detail>(responsebody);
+                Console.WriteLine(detail.detail);
+            }
+        }
+    }
+}
